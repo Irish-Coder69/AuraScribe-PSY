@@ -1435,11 +1435,12 @@ class SessionDialog(tk.Toplevel):
 # ─── Billing Record Dialog ─────────────────────────────────────────────────────
 
 class BillingDialog(tk.Toplevel):
-    def __init__(self, parent, rid=None, pid=None, on_save=None):
+    def __init__(self, parent, rid=None, pid=None, seed_session_id=None, on_save=None):
         super().__init__(parent)
         apply_window_icon(self)
         self.rid = rid
         self.pid = pid
+        self.seed_session_id = seed_session_id
         self.on_save = on_save
         self.title("Edit Record" if rid else "New Billing Record")
         self.geometry("560x420")
@@ -1453,7 +1454,7 @@ class BillingDialog(tk.Toplevel):
             self._vars["patient_id"].set(str(pid))
             self._vars["record_date"].set(current_date_str())
             self._select_patient_by_id(pid)
-            self._refresh_session_choices(auto_prefill=True)
+            self._refresh_session_choices(preferred_sid=self.seed_session_id, auto_prefill=True)
         self.grab_set()
 
     def _fld(self, name, default=""):
@@ -1798,6 +1799,7 @@ class SessionNotesTab(ttk.Frame):
         btn(tb, "+ New Session", self._new_session, "Accent.TButton").pack(side="left", padx=4)
         btn(tb, "Edit", self._edit_session).pack(side="left", padx=2)
         btn(tb, "Delete", self._delete_session, "Danger.TButton").pack(side="left", padx=2)
+        btn(tb, "Create Billing", self._to_billing).pack(side="left", padx=2)
         btn(tb, "Generate CMS-1500", self._to_cms).pack(side="left", padx=2)
 
         ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=8)
@@ -1932,6 +1934,30 @@ class SessionNotesTab(ttk.Frame):
                 if hasattr(tab, "load_from_session"):
                     tab.load_from_session(session_row["patient_id"], [dict(session_row)])
                 break
+
+    def _to_billing(self):
+        sid = self._sel_sid()
+        if not sid:
+            messagebox.showinfo("Select", "Select a session to create a billing record.")
+            return
+
+        session_row = db.get_session(sid)
+        if not session_row:
+            messagebox.showerror("Billing", "Could not load the selected session.")
+            return
+
+        def _after_save():
+            self.refresh()
+            app = self.winfo_toplevel()
+            if hasattr(app, "tab_billing"):
+                app.tab_billing.refresh()
+
+        BillingDialog(
+            self,
+            pid=session_row["patient_id"],
+            seed_session_id=session_row["id"],
+            on_save=_after_save,
+        )
 
 
 # ─── Billing Tab ───────────────────────────────────────────────────────────────
