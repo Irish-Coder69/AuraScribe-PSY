@@ -179,7 +179,22 @@ def _dx_pointer(dx_codes: List[str]) -> str:
 
 
 def map_form_data_to_template_fields(form_data: Dict[str, object], template_fields: Iterable[str]) -> Dict[str, str]:
-    """Map logical form_data keys to known CMS-1500 field patterns for fillable templates."""
+    """Map logical form_data keys to known CMS-1500 field patterns for fillable templates.
+    
+    NOTE ON BOX 32B/33B ID QUALIFIERS:
+    The current CMS1500_template.pdf has ID Qualifier fields but they are positioned in a
+    lower section of the form (y~740-752) rather than properly in boxes 32b/33b (y~700-715).
+    
+    Mapping:
+    - "b ID QUALIFIER" field (generic position) -> tries facility_id_qualifier first
+    - "32b*" fields (if added to template) -> facility_id_qualifier  
+    - "b BILLING ID QUALIFIER" field -> billing_id_qualifier
+    - "33b*" fields (if added to template) -> billing_id_qualifier
+    
+    To fix this properly, the template should be updated with:
+    - "32b SERVICE FACILITY ID QUALIFIER" field positioned in box 32b area
+    - "33b BILLING PROVIDER ID QUALIFIER" field positioned in box 33b area
+    """
     data = {k: _as_text(v) for k, v in form_data.items()}
     normalized_data = {_normalize(k): _as_text(v) for k, v in form_data.items()}
 
@@ -493,6 +508,9 @@ def map_form_data_to_template_fields(form_data: Dict[str, object], template_fiel
             value = get("facility_npi") or get("billing_npi")
         elif norm_field in {"btaxonomycode", "servicefacilitytaxonomycode", "32btaxonomycode"}:
             value = get("facility_taxonomy") or get("billing_taxonomy") or get("taxonomy_code")
+        elif norm_field == "32bidqualifier":
+            # Box 32b: Service Facility ID Qualifier
+            value = get("facility_id_qualifier")
         elif norm_field.startswith("33billingprovidername"):
             value = get("billing_name")
         elif norm_field == "billingstreetaddress":
@@ -512,7 +530,10 @@ def map_form_data_to_template_fields(form_data: Dict[str, object], template_fiel
         elif norm_field == "bbillingidqualifier":
             value = get("billing_id_qualifier")
         elif norm_field == "bidqualifier":
-            value = get("billing_id_qualifier")
+            # Handle both scenarios:
+            # - If facility_id_qualifier exists, this is for box 32b area
+            # - Otherwise, use billing_id_qualifier as fallback
+            value = get("facility_id_qualifier") or get("billing_id_qualifier")
 
         # ── Fallbacks ─────────────────────────────────────────────────────────
         elif norm_field in normalized_data:
