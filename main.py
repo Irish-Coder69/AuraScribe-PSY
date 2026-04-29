@@ -1445,12 +1445,15 @@ class BillingDialog(tk.Toplevel):
         self.geometry("560x420")
         self.resizable(False, False)
         self._vars = {}
+        self._session_rows = []
         self._build()
         if rid:
             self._load()
         elif pid:
             self._vars["patient_id"].set(str(pid))
             self._vars["record_date"].set(current_date_str())
+            self._select_patient_by_id(pid)
+            self._refresh_session_choices(auto_prefill=True)
         self.grab_set()
 
     def _fld(self, name, default=""):
@@ -1469,7 +1472,9 @@ class BillingDialog(tk.Toplevel):
         self.pt_combo = ttk.Combobox(f, textvariable=self.pt_var, width=32, state="readonly")
         self.pt_combo.grid(row=0, column=1, columnspan=3, sticky="ew")
         self._load_patients()
+        self.pt_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_session_choices(auto_prefill=True))
         self._fld("patient_id")
+        self._fld("session_id")
 
         ttk.Label(f, text="Record Date*").grid(row=1, column=0, sticky="e", padx=4, pady=4)
         ttk.Entry(f, textvariable=self._fld("record_date"), width=14).grid(row=1, column=1, sticky="w")
@@ -1499,6 +1504,18 @@ class BillingDialog(tk.Toplevel):
         ttk.Label(f, text="Claim #").grid(row=6, column=0, sticky="e", padx=4, pady=4)
         ttk.Entry(f, textvariable=self._fld("claim_number"), width=20).grid(row=6, column=1, sticky="w")
 
+        ttk.Label(f, text="Unbilled Session").grid(row=7, column=0, sticky="e", padx=4, pady=4)
+        self.sess_var = tk.StringVar()
+        self.sess_combo = ttk.Combobox(f, textvariable=self.sess_var, width=32, state="readonly")
+        self.sess_combo.grid(row=7, column=1, columnspan=3, sticky="ew")
+        self.sess_combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_selected_session_prefill())
+
+        ttk.Label(
+            f,
+            text="Selecting a session auto-fills service date, description, and charge.",
+            foreground=MUTED,
+        ).grid(row=8, column=0, columnspan=4, sticky="w", padx=4, pady=(0, 2))
+
         bot = ttk.Frame(self, padding=8)
         bot.pack(fill="x", side="bottom")
         btn(bot, "Save", self._save, "Accent.TButton").pack(side="left", padx=6)
@@ -1510,14 +1527,11 @@ class BillingDialog(tk.Toplevel):
         self.pt_combo["values"] = names
 
     def _load(self):
-        r = db.get_connection().execute("SELECT * FROM billing_records WHERE id=?", (self.rid,)).fetchone()
-        db.get_connection().close()
-        if not r:
-            return
-        # Manually close connection
         conn = db.get_connection()
         r = conn.execute("SELECT * FROM billing_records WHERE id=?", (self.rid,)).fetchone()
         conn.close()
+        if not r:
+            return
         for key, var in self._vars.items():
             if key == "patient_id":
                 continue
@@ -1527,6 +1541,74 @@ class BillingDialog(tk.Toplevel):
             if p["id"] == r["patient_id"]:
                 self.pt_combo.current(i)
                 break
+        self._refresh_session_choices(preferred_sid=r["session_id"], auto_prefill=False)
+
+    def _select_patient_by_id(self, pid):
+        for i, p in enumerate(self._pts):
+            if p["id"] == pid:
+                self.pt_combo.current(i)
+                self._vars["patient_id"].set(str(pid))
+                return
+
+    def _refresh_session_choices(self, preferred_sid=None, auto_prefill=False):
+        sel = self.pt_combo.current()
+        if sel < 0:
+            self._session_rows = []
+            self.sess_combo["values"] = []
+            self.sess_var.set("")
+            self._vars["session_id"].set("")
+            return
+
+        pid = self._pts[sel]["id"]
+        self._vars["patient_id"].set(str(pid))
+
+        session_rows = [dict(s) for s in db.get_unbilled_sessions_for_patient(pid)]
+        if preferred_sid:
+            existing = db.get_session(preferred_sid)
+            if existing and not any(int(s.get("id", 0)) == int(preferred_sid) for s in session_rows):
+                session_rows.insert(0, dict(existing))
+
+        self._session_rows = session_rows
+        labels = [
+            f"{fmt_date(s.get('session_date', ''))} | {s.get('session_type', '')} | {s.get('cpt_code', '')} | {fmt_money(s.get('fee', 0))}"
+            for s in self._session_rows
+        ]
+        self.sess_combo["values"] = labels
+
+        if not self._session_rows:
+            self.sess_var.set("")
+            self._vars["session_id"].set("")
+            return
+
+        idx = 0
+        if preferred_sid:
+            for i, s in enumerate(self._session_rows):
+                if int(s.get("id", 0) or 0) == int(preferred_sid):
+                    idx = i
+                    break
+
+        self.sess_combo.current(idx)
+        if auto_prefill:
+            self._apply_selected_session_prefill()
+
+    def _apply_selected_session_prefill(self):
+        idx = self.sess_combo.current()
+        if idx < 0 or idx >= len(self._session_rows):
+            self._vars["session_id"].set("")
+            return
+
+        s = self._session_rows[idx]
+        self._vars["session_id"].set(str(s.get("id", "") or ""))
+
+        self._vars["service_date"].set(str(s.get("session_date", "") or ""))
+        cpt = str(s.get("cpt_code", "") or "")
+        stype = str(s.get("session_type", "") or "Session")
+        self._vars["description"].set(f"{stype} {cpt}".strip())
+        try:
+            fee = float(s.get("fee", 0) or 0)
+        except Exception:
+            fee = 0.0
+        self._vars["charge"].set(f"{fee:.2f}")
 
     def _save(self):
         sel = self.pt_combo.current()
@@ -1536,6 +1618,13 @@ class BillingDialog(tk.Toplevel):
         pid = self._pts[sel]["id"]
         data = {k: v.get().strip() for k, v in self._vars.items()}
         data["patient_id"] = pid
+        if data.get("session_id"):
+            try:
+                data["session_id"] = int(data["session_id"])
+            except Exception:
+                data["session_id"] = None
+        else:
+            data["session_id"] = None
         for money_key in ["charge","payment","ins_payment","adjustment"]:
             try:
                 data[money_key] = float(data.get(money_key, 0) or 0)

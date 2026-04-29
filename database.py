@@ -413,6 +413,21 @@ def get_sessions_for_patient(pid):
     return rows
 
 
+def get_unbilled_sessions_for_patient(pid):
+    """Return sessions that do not yet have a linked billing record."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT s.*
+           FROM session_notes s
+           LEFT JOIN billing_records b ON b.session_id = s.id
+           WHERE s.patient_id=? AND b.id IS NULL
+           ORDER BY s.session_date DESC, s.id DESC""",
+        (pid,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
 def get_sessions_by_date(session_date):
     conn = get_connection()
     rows = conn.execute(

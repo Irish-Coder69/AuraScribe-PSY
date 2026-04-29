@@ -73,7 +73,14 @@ def generate_patient_invoice(
         if "copay" in text or "co-pay" in text:
             outstanding_copay += max(_as_float(r.get("balance")), 0.0)
 
-    invoice_no = f"INV-{_as_text(patient.get('id')) or 'NA'}-{datetime.now().strftime('%Y%m%d')}"
+    now = datetime.now()
+    invoice_no = f"INV-{_as_text(patient.get('id')) or 'NA'}-{now.strftime('%Y%m%d')}"
+    due_date = now.replace(day=min(now.day, 28))
+    if due_date.month == now.month:
+        # Keep simple net-15 style due date without extra imports.
+        from datetime import timedelta
+
+        due_date = now + timedelta(days=15)
 
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
@@ -96,7 +103,8 @@ def generate_patient_invoice(
 
     page.insert_text((right - 92, 44), "INVOICE", fontsize=18, fontname="helv", color=(0.07, 0.16, 0.32))
     page.insert_text((right - 130, 65), f"Invoice #: {invoice_no}", fontsize=10, fontname="helv")
-    page.insert_text((right - 130, 79), f"Date: {datetime.now().strftime('%m/%d/%Y')}", fontsize=10, fontname="helv")
+    page.insert_text((right - 130, 79), f"Date: {now.strftime('%m/%d/%Y')}", fontsize=10, fontname="helv")
+    page.insert_text((right - 130, 93), f"Due Date: {due_date.strftime('%m/%d/%Y')}", fontsize=10, fontname="helv")
 
     _line(page, left, 108, right)
 
@@ -113,7 +121,7 @@ def generate_patient_invoice(
     page.insert_text((box_x + 10, 154), f"Remaining Amount Owed: {_money(amount_due)}", fontsize=10, fontname="helv")
     page.insert_text((box_x + 10, 172), f"Current Balance: {_money(total_balance)}", fontsize=10, fontname="helv")
 
-    table_top = 212
+    table_top = 224
     col_x = [left, 98, 248, 316, 384, 452, 516, right]
     headers = ["Date", "Description", "Charge", "Pt Paid", "Ins Paid", "Adj", "Balance"]
 
@@ -157,6 +165,11 @@ def generate_patient_invoice(
     page.insert_text((374, sum_y + 42), f"Insurance Paid: {_money(total_ins_paid)}", fontsize=10, fontname="helv")
     page.insert_text((374, sum_y + 59), f"Adjustments: {_money(total_adjust)}", fontsize=10, fontname="helv")
     page.insert_text((374, sum_y + 76), f"Amount Due: {_money(amount_due)}", fontsize=11, fontname="helv", color=(0.56, 0.05, 0.05))
+
+    terms_y = min(sum_y + 108, 706)
+    page.draw_rect((left, terms_y - 12, right, terms_y + 26), color=(0.86, 0.88, 0.92), fill=(0.99, 0.995, 1.0), width=0.7)
+    page.insert_text((left + 8, terms_y), "Payment Terms: Due within 15 days. Please include invoice number with payment.", fontsize=8.8, fontname="helv", color=(0.22, 0.25, 0.30))
+    page.insert_text((left + 8, terms_y + 14), "Questions? Contact the office using the phone/email listed above.", fontsize=8.8, fontname="helv", color=(0.22, 0.25, 0.30))
 
     foot_y = 760
     _line(page, left, foot_y - 10, right, color=(0.86, 0.88, 0.92), width=0.7)
