@@ -85,14 +85,26 @@ CMS_OVERLAY_ANCHOR_OPTIONS = [
     ("1a Insured ID", "box_1a"),
     ("1b Group #", "box_1b"),
     ("2 Patient Name", "box_2"),
-    ("3 Patient DOB", "box_3"),
+    ("3 Patient DOB", "box_3_dob"),
+    ("3 Sex M", "box_3_sex_m"),
+    ("3 Sex F", "box_3_sex_f"),
     ("4 Insured Name", "box_4"),
-    ("5 Patient Address", "box_5"),
+    ("5 Patient Street", "box_5_street"),
+    ("5 Patient City", "box_5_city"),
+    ("5 Patient State", "box_5_state"),
+    ("5 Patient ZIP", "box_5_zip"),
+    ("5 Patient Phone", "box_5_phone"),
     ("6 Patient Relation", "box_6"),
-    ("7 Insured Address", "box_7"),
+    ("7 Insured Street", "box_7_street"),
+    ("7 Insured City", "box_7_city"),
+    ("7 Insured State", "box_7_state"),
+    ("7 Insured ZIP", "box_7_zip"),
+    ("7 Insured Phone", "box_7_phone"),
     ("9 Other Insured", "box_9"),
     ("10 Employment Status", "box_10"),
     ("11 Insured Plan", "box_11"),
+    ("11 Insured Sex M", "box_11_sex_m"),
+    ("11 Insured Sex F", "box_11_sex_f"),
     ("14 Other Date/Qual", "box_14"),
     ("15 Other Date", "box_15"),
     ("17a Referral NPI", "box_17a"),
@@ -2538,7 +2550,11 @@ class CMS1500Tab(ttk.Frame):
         dlg = tk.Toplevel(self)
         apply_window_icon(dlg)
         dlg.title("Pre-Printed Form Alignment")
-        dlg.resizable(False, False)
+        dlg.resizable(True, True)
+        try:
+            dlg.state("zoomed")
+        except Exception:
+            dlg.geometry("1200x900")
         dlg.grab_set()
 
         ttk.Label(

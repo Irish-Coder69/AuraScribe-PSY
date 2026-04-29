@@ -819,25 +819,45 @@ def _overlay_anchor_for_widget(field_name: str, norm_widget: str) -> str | None:
     if norm_widget.startswith("2patientsname"):
         return "box_2"
     
-    # Box 3: Patient DOB
+    # Box 3: Patient DOB and sex markers
     if norm_widget.startswith("3patientsbirthdate"):
-        return "box_3"
+        return "box_3_dob"
+    if norm_widget == "sexm":
+        return "box_3_sex_m"
+    if norm_widget == "sexf":
+        return "box_3_sex_f"
     
     # Box 4: Insured Name
     if norm_widget.startswith("4insuredsname"):
         return "box_4"
     
-    # Box 5: Patient Address
+    # Box 5: Patient Address components
     if norm_widget.startswith("5patientsaddress"):
-        return "box_5"
+        return "box_5_street"
+    if norm_widget == "city":
+        return "box_5_city"
+    if norm_widget == "state2":
+        return "box_5_state"
+    if norm_widget == "zipcode":
+        return "box_5_zip"
+    if "telephoneincludeareacode" in norm_widget and "2" not in norm_widget:
+        return "box_5_phone"
     
     # Box 6: Patient Relation to Insured
     if "relationshiptoinsured" in norm_widget or "patientsrelationship" in norm_widget:
         return "box_6"
     
-    # Box 7: Insured Address
+    # Box 7: Insured Address components
     if norm_widget.startswith("7insuredsaddress"):
-        return "box_7"
+        return "box_7_street"
+    if norm_widget == "city2":
+        return "box_7_city"
+    if norm_widget in {"state", "state1"}:
+        return "box_7_state"
+    if norm_widget == "zipcode2":
+        return "box_7_zip"
+    if "telephoneincludeareacode2" in norm_widget:
+        return "box_7_phone"
     
     # Box 9: Other Insured
     if "otherinsured" in norm_widget:
@@ -847,7 +867,13 @@ def _overlay_anchor_for_widget(field_name: str, norm_widget: str) -> str | None:
     if "employmentrelated" in norm_widget or "autoaccident" in norm_widget or "outsidelab" in norm_widget:
         return "box_10"
     
-    # Box 11: Insured Plan (insurance type checkboxes)
+    # Box 11: Insured sex markers
+    if norm_widget in {"sexm1", "sexm2"}:
+        return "box_11_sex_m"
+    if norm_widget in {"sexf1", "sexf2"}:
+        return "box_11_sex_f"
+
+    # Box 11: existing insured-plan anchor
     if "medcare" in norm_widget or "medicaid" in norm_widget or "tricare" in norm_widget or "champva" in norm_widget or "grouphealth" in norm_widget or "fecablklung" in norm_widget:
         return "box_11"
     
