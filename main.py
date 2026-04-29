@@ -2575,10 +2575,13 @@ class CMS1500Tab(ttk.Frame):
         apply_window_icon(dlg)
         dlg.title("Pre-Printed Form Alignment")
         dlg.resizable(True, True)
-        try:
-            dlg.state("zoomed")
-        except Exception:
-            dlg.geometry("1200x900")
+        dlg.update_idletasks()
+        dlg_w, dlg_h = 700, 780
+        sw = dlg.winfo_screenwidth()
+        sh = dlg.winfo_screenheight()
+        x = max(0, (sw - dlg_w) // 2)
+        y = max(0, (sh - dlg_h) // 2)
+        dlg.geometry(f"{dlg_w}x{dlg_h}+{x}+{y}")
         dlg.grab_set()
 
         ttk.Label(
