@@ -1966,6 +1966,8 @@ class BillingTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self._pid_filter = None
+        self._patient_filter_var = tk.StringVar()
+        self._patient_filter_map = {}
         self._build()
         self.refresh()
 
@@ -1976,6 +1978,19 @@ class BillingTab(ttk.Frame):
         btn(tb, "Edit", self._edit_record).pack(side="left", padx=2)
         btn(tb, "Delete", self._delete_record, "Danger.TButton").pack(side="left", padx=2)
         btn(tb, "All Records", self._show_all).pack(side="left", padx=2)
+
+        ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Label(tb, text="Patient:").pack(side="left")
+        self._patient_filter_combo = ttk.Combobox(
+            tb,
+            textvariable=self._patient_filter_var,
+            width=34,
+            state="readonly",
+        )
+        self._patient_filter_combo.pack(side="left", padx=4)
+        self._patient_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_patient_filter_from_combo())
+        self._load_patient_filter_options()
+
         ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=8)
         btn(tb, "Save Invoice PDF", self._save_invoice_pdf).pack(side="left", padx=2)
         btn(tb, "Print Invoice", self._print_invoice_pdf).pack(side="left", padx=2)
@@ -1990,7 +2005,7 @@ class BillingTab(ttk.Frame):
             "id", "patient_name", "record_date", "description", "charge", "payment",
             "ins_payment", "adjustment", "balance", "payment_type",
         )
-        self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="browse")
+        self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="extended")
         hdrs = [
             ("ID", 40), ("Patient", 160), ("Date", 90), ("Description", 160),
             ("Charge", 80), ("Pt Paid", 75), ("Ins Paid", 75), ("Adj", 70),
@@ -2017,16 +2032,46 @@ class BillingTab(ttk.Frame):
         self._lbl_balance = ttk.Label(sumbar, text="Balance: $0.00", font=FONT_LG, foreground=DANGER)
         self._lbl_balance.pack(side="left", padx=16)
 
+    def _load_patient_filter_options(self):
+        pts = db.get_all_patients("Active") + db.get_all_patients("Inactive")
+        uniq = {}
+        for p in pts:
+            uniq[p["id"]] = p
+        ordered = sorted(uniq.values(), key=lambda p: ((p["last_name"] or "").lower(), (p["first_name"] or "").lower()))
+
+        labels = ["All Patients"]
+        mapping = {"All Patients": None}
+        for p in ordered:
+            label = f"{p['last_name']}, {p['first_name']} (ID:{p['id']})"
+            labels.append(label)
+            mapping[label] = p["id"]
+
+        self._patient_filter_map = mapping
+        self._patient_filter_combo["values"] = labels
+        self._patient_filter_combo.current(0)
+
+    def _apply_patient_filter_from_combo(self):
+        label = self._patient_filter_var.get().strip()
+        pid = self._patient_filter_map.get(label)
+        if pid is None:
+            self._show_all()
+            return
+        self.filter_patient(pid)
+
     def filter_patient(self, pid):
         self._pid_filter = pid
         pt = db.get_patient(pid)
         if pt:
             self._pt_label.config(text=f"Showing: {pt['last_name']}, {pt['first_name']}")
+            expected = f"{pt['last_name']}, {pt['first_name']} (ID:{pt['id']})"
+            if expected in self._patient_filter_map:
+                self._patient_filter_var.set(expected)
         self.refresh()
 
     def _show_all(self):
         self._pid_filter = None
         self._pt_label.config(text="")
+        self._patient_filter_var.set("All Patients")
         self.refresh()
 
     def refresh(self):
@@ -2086,6 +2131,9 @@ class BillingTab(ttk.Frame):
         sel = self.tv.selection()
         return int(sel[0]) if sel else None
 
+    def _selected_rids(self):
+        return [int(x) for x in self.tv.selection()]
+
     def _new_record(self):
         BillingDialog(self, pid=self._pid_filter, on_save=self.refresh)
 
@@ -2104,21 +2152,48 @@ class BillingTab(ttk.Frame):
             db.delete_billing_record(rid)
             self.refresh()
 
-    def _invoice_patient_id(self):
+    def _invoice_context(self):
+        selected = self._selected_rids()
+
+        if selected:
+            rows = []
+            pids = set()
+            for rid in selected:
+                row = db.get_billing_record(rid)
+                if not row:
+                    continue
+                pids.add(int(row["patient_id"]))
+                rows.append(dict(row))
+
+            if not rows:
+                return None, None
+            if len(pids) != 1:
+                messagebox.showinfo("Invoice", "Please select bills for only one patient at a time.")
+                return None, None
+
+            pid = next(iter(pids))
+            return pid, rows
+
         if self._pid_filter:
-            return self._pid_filter
+            pid = self._pid_filter
+            return pid, [dict(r) for r in db.get_billing_for_patient(pid)]
+
         rid = self._sel_rid()
-        if not rid:
-            return None
-        row = db.get_billing_record(rid)
-        if not row:
-            return None
-        return row["patient_id"]
+        if rid:
+            row = db.get_billing_record(rid)
+            if row:
+                pid = int(row["patient_id"])
+                return pid, [dict(r) for r in db.get_billing_for_patient(pid)]
+
+        return None, None
 
     def _build_invoice_pdf(self, out_path: Path) -> Path | None:
-        pid = self._invoice_patient_id()
+        pid, billing_rows = self._invoice_context()
         if not pid:
-            messagebox.showinfo("Invoice", "Select a billing record or open Billing Ledger for a patient first.")
+            messagebox.showinfo(
+                "Invoice",
+                "Select a patient in Billing, or select billing rows for one patient, then try again.",
+            )
             return None
 
         patient = db.get_patient(pid)
@@ -2126,7 +2201,6 @@ class BillingTab(ttk.Frame):
             messagebox.showerror("Invoice", "Could not load patient data for invoice.")
             return None
 
-        billing_rows = [dict(r) for r in db.get_billing_for_patient(pid)]
         if not billing_rows:
             messagebox.showinfo("Invoice", "No billing records found for this patient.")
             return None
@@ -2142,9 +2216,12 @@ class BillingTab(ttk.Frame):
             return None
 
     def _save_invoice_pdf(self):
-        pid = self._invoice_patient_id()
+        pid, _ = self._invoice_context()
         if not pid:
-            messagebox.showinfo("Invoice", "Select a billing record or open Billing Ledger for a patient first.")
+            messagebox.showinfo(
+                "Invoice",
+                "Select a patient in Billing, or select billing rows for one patient, then try again.",
+            )
             return
 
         patient = db.get_patient(pid)
@@ -2165,9 +2242,12 @@ class BillingTab(ttk.Frame):
             messagebox.showinfo("Invoice Saved", f"Invoice PDF saved:\n{saved}")
 
     def _print_invoice_pdf(self):
-        pid = self._invoice_patient_id()
+        pid, _ = self._invoice_context()
         if not pid:
-            messagebox.showinfo("Invoice", "Select a billing record or open Billing Ledger for a patient first.")
+            messagebox.showinfo(
+                "Invoice",
+                "Select a patient in Billing, or select billing rows for one patient, then try again.",
+            )
             return
 
         print_path = APP_ROOT / "temp" / f"invoice_{pid}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
