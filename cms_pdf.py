@@ -807,18 +807,22 @@ def _find_widget_by_matchers(widgets: Iterable[object], *, exact: str | None = N
 
 def _overlay_anchor_for_widget(field_name: str, norm_widget: str) -> str | None:
     """Return box-alignment anchor key used for per-box overlay nudges."""
+    # Box 1: Insurance type checkboxes (Medicare, Medicaid, Tricare, etc.)
+    if "1medcare" in norm_widget or norm_widget in {"medicaid", "nubber", "tricare", "champva", "grouphealthplan", "fecablklung", "other"}:
+        return "box_1"
+
     # Box 1a: Insured ID
     if "1ainsuredsid" in norm_widget or "1ainsuredsi" in norm_widget:
         return "box_1a"
-    
+
     # Box 1b: Group #
     if "1bgroup" in norm_widget or "groupnumber" in norm_widget:
         return "box_1b"
-    
+
     # Box 2: Patient Name
     if norm_widget.startswith("2patientsname"):
         return "box_2"
-    
+
     # Box 3: Patient DOB and sex markers
     if norm_widget.startswith("3patientsbirthdate"):
         return "box_3_dob"
@@ -826,11 +830,11 @@ def _overlay_anchor_for_widget(field_name: str, norm_widget: str) -> str | None:
         return "box_3_sex_m"
     if norm_widget == "sexf":
         return "box_3_sex_f"
-    
+
     # Box 4: Insured Name
     if norm_widget.startswith("4insuredsname"):
         return "box_4"
-    
+
     # Box 5: Patient Address components
     if norm_widget.startswith("5patientsaddress"):
         return "box_5_street"
@@ -842,11 +846,11 @@ def _overlay_anchor_for_widget(field_name: str, norm_widget: str) -> str | None:
         return "box_5_zip"
     if "telephoneincludeareacode" in norm_widget and "2" not in norm_widget:
         return "box_5_phone"
-    
+
     # Box 6: Patient Relation to Insured
     if "relationshiptoinsured" in norm_widget or "patientsrelationship" in norm_widget:
         return "box_6"
-    
+
     # Box 7: Insured Address components
     if norm_widget.startswith("7insuredsaddress"):
         return "box_7_street"
@@ -858,113 +862,207 @@ def _overlay_anchor_for_widget(field_name: str, norm_widget: str) -> str | None:
         return "box_7_zip"
     if "telephoneincludeareacode2" in norm_widget:
         return "box_7_phone"
-    
+
     # Box 9: Other Insured
     if "otherinsured" in norm_widget:
         return "box_9"
-    
-    # Box 10: Employment Status
-    if "employmentrelated" in norm_widget or "autoaccident" in norm_widget or "outsidelab" in norm_widget:
+
+    # Box 10: Employment/accident checkboxes (auto accident state included)
+    if "employmentrelated" in norm_widget or "autoaccident" in norm_widget or norm_widget == "placestate" or "otheraccident" in norm_widget:
         return "box_10"
-    
+
+    # Box 10d: Claim Codes / Other Claim ID
+    if "10dclaimcodes" in norm_widget or "botherclaimid" in norm_widget:
+        return "box_10d"
+
+    # Box 11: Insured plan / group number
+    if "insuredspolicygrouporfecanumber11" in norm_widget or "cinsuranceplannameorprogramname" in norm_widget:
+        return "box_11"
+
+    # Box 11a: Insured DOB
+    if "ainsuredsdateofbirth" in norm_widget or "ainsureddateofbirth" in norm_widget:
+        return "box_11a"
+
     # Box 11: Insured sex markers
     if norm_widget in {"sexm1", "sexm2"}:
         return "box_11_sex_m"
     if norm_widget in {"sexf1", "sexf2"}:
         return "box_11_sex_f"
 
-    # Box 11: existing insured-plan anchor
-    if "medcare" in norm_widget or "medicaid" in norm_widget or "tricare" in norm_widget or "champva" in norm_widget or "grouphealth" in norm_widget or "fecablklung" in norm_widget:
-        return "box_11"
-    
+    # Box 11d: Other health benefit plan (checkboxes and plan name)
+    if "disthereanotherhealthbenefitplan" in norm_widget or "isthereanotherhealthbenefitplan" in norm_widget or norm_widget == "dinsuranceplannameorprogramname":
+        return "box_11d"
+
+    # Box 12: Patient signature / signature date
+    if norm_widget.startswith("12patientssignature") or norm_widget == "signaturedate":
+        return "box_12"
+
+    # Box 13: Insured signature
+    if norm_widget.startswith("13insuredssignature"):
+        return "box_13"
+
     # Box 14: Other Date & Qualifier
     if norm_widget.startswith("15otherdatequal"):
         return "box_14"
-    
+
     # Box 15: Other Date
     if norm_widget.startswith("15otherdate") and "qual" not in norm_widget:
         return "box_15"
-    
+
+    # Box 16: Unable to work dates (from/to)
+    if norm_widget.startswith("16datespatientunabletowork") or norm_widget.startswith("datespatientunabletowork"):
+        return "box_16"
+
+    # Box 17: Referring provider name
+    if norm_widget.startswith("17nameofreferringprovider"):
+        return "box_17"
+
     # Box 17a: Referral NPI / Taxonomy
     if "referringprovidertaxonomy" in norm_widget or "17areferring" in norm_widget:
         return "box_17a"
-    
+
     # Box 17b: Referral ID
     if "referringprovidernpi" in norm_widget or "17breferring" in norm_widget:
         return "box_17b"
-    
+
+    # Box 18: Hospitalization dates (from/to)
+    if norm_widget.startswith("18hospitalizationdate") or norm_widget.startswith("hospitalizationdate"):
+        return "box_18"
+
+    # Box 19: Additional claim info
+    if norm_widget.startswith("19additionalclaim"):
+        return "box_19"
+
+    # Box 20: Outside lab (checkboxes and charge amount)
+    if "20outsidelab" in norm_widget or "outsidelabno" in norm_widget or norm_widget == "charges":
+        return "box_20"
+
     # Box 21: Diagnosis Codes
     if norm_widget in {"ai", "bi", "ci", "di", "ei", "fi", "gi", "hi", "ii", "ji", "ki", "li"}:
         return "box_21"
-    
+
+    # Box 22: Resubmission code / original ref no
+    if norm_widget.startswith("22resubmission") or norm_widget == "originalrefno":
+        return "box_22"
+
+    # Box 23: Prior auth number
+    if norm_widget.startswith("23priorauthorization"):
+        return "box_23"
+
     # Box 24A: Service Date
     if "dateofservicefrommmddyyrow" in norm_widget or "24adateofservice" in norm_widget:
         return "box_24a"
-    
+
     # Box 24B: Place of Service
     if "placeofservice" in norm_widget or "bplaceof" in norm_widget:
         return "box_24b"
-    
+
     # Box 24C: EMG
     if "emgrow" in norm_widget or "cemergency" in norm_widget:
         return "box_24c"
-    
+
     # Box 24D: Procedure Code & Modifier
     if "proceduresservicesorsupplies" in norm_widget or "modifierrow" in norm_widget:
         return "box_24d"
-    
+
     # Box 24E: Diagnosis Pointer
     if "diagnosisponter" in norm_widget:
         return "box_24e"
-    
+
     # Box 24F: Charges
     if field_name.startswith("F CHARGESRow") or "chargesrow" in norm_widget:
         return "box_24f"
-    
+
     # Box 24G: Days or Units
     if "daysorunits" in norm_widget:
         return "box_24g"
-    
-    # Box 24J: Rendering Provider (NPI)
+
+    # Box 24I: ID Qualifier (rendering provider type, per service line)
+    if "iidqualifierrow" in norm_widget:
+        return "box_24i"
+
+    # Box 24J: Rendering Provider NPI
     if "npi" in norm_widget and "row" in norm_widget:
         return "box_24j"
-    
-    # Box 25: Federal Tax ID
-    if "federaltaxid" in norm_widget or "taxid" in norm_widget:
+
+    # Box 24J: Taxonomy code (per service line)
+    if "jtaxonomycode" in norm_widget:
+        return "box_24j_tax"
+
+    # Box 25: Federal Tax ID number
+    if "federaltaxid" in norm_widget or "taxid" in norm_widget or norm_widget == "nmber":
         return "box_25"
-    
+
+    # Box 25: SSN/EIN type checkboxes
+    if norm_widget in {"ein", "ssn"}:
+        return "box_25_type"
+
     # Box 26: Patient Account Number
     if "patientaccountno" in norm_widget:
         return "box_26"
-    
+
     # Box 27: Accept Assignment
     if "acceptassignment" in norm_widget:
         return "box_27"
-    
+
     # Box 28: Total Charge
     if "totalcharge" in norm_widget:
         return "box_28"
-    
+
     # Box 29: Amount Paid
     if "amountpaid" in norm_widget or "totalpaid" in norm_widget:
         return "box_29"
-    
+
     # Box 31: Provider Signature
     if norm_widget.startswith("31providersignature"):
         return "box_31"
-    
+
+    # Box 31: Provider Date
+    if norm_widget == "providerdate":
+        return "box_31_date"
+
     # Box 32a: Service Facility Name
     if "servicefacilityname" in norm_widget:
         return "box_32a"
-    
+
+    # Box 32: Facility address subfields
+    if norm_widget == "servicefacilitystreetaddress":
+        return "box_32_street"
+    if norm_widget == "servicefacilitycity":
+        return "box_32_city"
+    if norm_widget == "servicefacilitystate":
+        return "box_32_state"
+    if norm_widget == "servicefacilityzipcode":
+        return "box_32_zip"
+    if norm_widget == "anpi1":
+        return "box_32_npi"
+    if norm_widget == "btaxonomycode":
+        return "box_32_tax"
+
     # Box 32b: Service Facility ID Qualifier
     if "32bidqualifier" in norm_widget or "bservicefacilityidqualifier" in norm_widget:
         return "box_32b"
-    
+
     # Box 33a: Billing Provider Name
     if "billingprovidername" in norm_widget:
         return "box_33a"
-    
+
+    # Box 33: Billing address subfields
+    if norm_widget == "billingstreetaddress":
+        return "box_33_street"
+    if norm_widget == "billingcity":
+        return "box_33_city"
+    if norm_widget == "billingstate":
+        return "box_33_state"
+    if norm_widget == "billingzipcode":
+        return "box_33_zip"
+    if "billingphonenumber" in norm_widget:
+        return "box_33_phone"
+    if norm_widget == "anpi2":
+        return "box_33_npi"
+    if norm_widget == "bbillingtaxonomycode":
+        return "box_33_tax"
+
     # Box 33b: Billing Provider ID Qualifier
     if "bbillingidqualifier" in norm_widget or "bbillingprovideridqualifier" in norm_widget:
         return "box_33b"
