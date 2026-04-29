@@ -1404,8 +1404,7 @@ class SessionDialog(tk.Toplevel):
         self._response.insert("1.0", s["response"] or "")
         self._plan.insert("1.0", s["plan"] or "")
         self.signed_var.set(s["signed"] or 0)
-        # For existing sessions, default off if no linked billing exists.
-        self.billing_var.set(1 if db.get_billing_record_for_session(self.sid) else 0)
+        self.billing_var.set(1)  # Always default ON for both new and edited sessions
 
     def _sync_billing_record(self, sid: int, pid: int, data: dict):
         session_date = str(data.get("session_date", "") or "")
