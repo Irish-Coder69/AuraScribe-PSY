@@ -1944,13 +1944,21 @@ class SessionNotesTab(ttk.Frame):
         btn(tb, "Delete", self._delete_session, "Danger.TButton").pack(side="left", padx=2)
         btn(tb, "Create Billing", self._to_billing).pack(side="left", padx=2)
         btn(tb, "Generate CMS-1500", self._to_cms).pack(side="left", padx=2)
+        btn(tb, "Select All", self._select_all_rows).pack(side="left", padx=2)
+        btn(tb, "Clear Selection", self._clear_selection).pack(side="left", padx=2)
+        btn(tb, "Save Notes Report PDF", self._save_notes_report_pdf).pack(side="left", padx=2)
+        btn(tb, "Print Selected Notes", self._print_selected_notes).pack(side="left", padx=2)
 
         ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=8)
-        ttk.Label(tb, text="Date Filter:").pack(side="left")
-        self._date_sv = tk.StringVar()
-        ttk.Entry(tb, textvariable=self._date_sv, width=12).pack(side="left", padx=4)
-        ttk.Label(tb, text="(YYYY-MM-DD)").pack(side="left")
-        btn(tb, "Filter", self.refresh).pack(side="left", padx=2)
+        ttk.Label(tb, text="From:").pack(side="left")
+        self._date_from_sv = tk.StringVar()
+        ttk.Entry(tb, textvariable=self._date_from_sv, width=11).pack(side="left", padx=2)
+        ttk.Label(tb, text="To:").pack(side="left", padx=(4, 0))
+        self._date_to_sv = tk.StringVar()
+        ttk.Entry(tb, textvariable=self._date_to_sv, width=11).pack(side="left", padx=2)
+        ttk.Label(tb, text="(YYYY-MM-DD)").pack(side="left", padx=(2, 0))
+        btn(tb, "Apply Filter", self.refresh).pack(side="left", padx=2)
+        btn(tb, "Clear Dates", self._clear_date_filter).pack(side="left", padx=2)
 
         self._pt_label = ttk.Label(tb, text="", foreground=ACCENT, font=("Calibri", 10, "bold"))
         self._pt_label.pack(side="right", padx=8)
@@ -1959,7 +1967,7 @@ class SessionNotesTab(ttk.Frame):
         frm.pack(fill="both", expand=True, padx=8, pady=(0, 4))
 
         cols = ("id","patient_name","session_date","session_type","cpt_code","fee","signed")
-        self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="browse")
+        self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="extended")
         hdrs = [("ID",40),("Patient",180),("Date",90),("Type",120),("CPT",70),("Fee",80),("Signed",60)]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
@@ -1993,8 +2001,14 @@ class SessionNotesTab(ttk.Frame):
     def _show_all(self):
         self._pid_filter = None
         self._pt_label.config(text="")
-        self._date_sv.set("")
+        self._date_from_sv.set("")
+        self._date_to_sv.set("")
         self._pt_sv.set("— Select Patient —")
+        self.refresh()
+
+    def _clear_date_filter(self):
+        self._date_from_sv.set("")
+        self._date_to_sv.set("")
         self.refresh()
 
     def _load_patient_list(self):
@@ -2013,23 +2027,24 @@ class SessionNotesTab(ttk.Frame):
         if match:
             self._pid_filter = match["id"]
             self._pt_label.config(text=f"Showing: {name}")
-            self._date_sv.set("")
+            self._date_from_sv.set("")
+            self._date_to_sv.set("")
             self.refresh()
 
     def refresh(self):
         self.tv.delete(*self.tv.get_children())
-        date_flt = self._date_sv.get().strip()
         if not self._pid_filter:
             # Blank until a patient is chosen
             return
-        if self._pid_filter:
-            rows = db.get_sessions_for_patient(self._pid_filter)
-            for r in rows:
-                self._insert_row(r, dict(r), r["id"])
-        elif date_flt:
-            rows = db.get_sessions_by_date(date_flt)
-            for i, r in enumerate(rows):
-                self._insert_row(r, dict(r), r["id"], even=i % 2 == 0)
+        date_from = self._date_from_sv.get().strip()
+        date_to = self._date_to_sv.get().strip()
+        rows = db.get_sessions_for_patient(self._pid_filter)
+        if date_from:
+            rows = [r for r in rows if (r["session_date"] or "") >= date_from]
+        if date_to:
+            rows = [r for r in rows if (r["session_date"] or "") <= date_to]
+        for i, r in enumerate(rows):
+            self._insert_row(r, dict(r), r["id"], even=i % 2 == 0)
 
     def _insert_row(self, r, rd, iid, even=False):
         name = rd.get("patient_name", "")
@@ -2063,6 +2078,22 @@ class SessionNotesTab(ttk.Frame):
     def _sel_sid(self):
         sel = self.tv.selection()
         return int(sel[0]) if sel else None
+
+    def _selected_sids(self):
+        return [int(x) for x in self.tv.selection()]
+
+    def _select_all_rows(self):
+        rows = self.tv.get_children()
+        if not rows:
+            return
+        self.tv.selection_set(rows)
+        self._on_select()
+
+    def _clear_selection(self):
+        self.tv.selection_remove(self.tv.selection())
+        self._preview.config(state="normal")
+        self._preview.delete("1.0", "end")
+        self._preview.config(state="disabled")
 
     def _new_session(self):
         SessionDialog(self, pid=self._pid_filter, on_save=lambda _: self.refresh())
@@ -2125,6 +2156,200 @@ class SessionNotesTab(ttk.Frame):
             seed_session_id=session_row["id"],
             on_save=_after_save,
         )
+
+    def _notes_report_context(self):
+        selected = self._selected_sids()
+        if not selected:
+            messagebox.showinfo(
+                "Session Notes Report",
+                "Select one or more session notes to include in the report.",
+            )
+            return None, None
+
+        sessions = []
+        pids = set()
+        for sid in selected:
+            row = db.get_session(sid)
+            if not row:
+                continue
+            row_d = dict(row)
+            sessions.append(row_d)
+            pids.add(int(row_d.get("patient_id") or 0))
+
+        if not sessions:
+            messagebox.showerror("Session Notes Report", "Could not load the selected session notes.")
+            return None, None
+
+        if len(pids) != 1:
+            messagebox.showinfo(
+                "Session Notes Report",
+                "Please select notes for only one patient at a time.",
+            )
+            return None, None
+
+        pid = next(iter(pids))
+        patient = db.get_patient(pid)
+        if not patient:
+            messagebox.showerror("Session Notes Report", "Could not load patient data.")
+            return None, None
+
+        sessions.sort(key=lambda r: (r.get("session_date") or "", int(r.get("id") or 0)))
+        return dict(patient), sessions
+
+    def _build_notes_report_pdf(self, out_path: Path) -> Path | None:
+        patient, sessions = self._notes_report_context()
+        if not patient or not sessions:
+            return None
+
+        if not PDF_RENDER_AVAILABLE or fitz is None:
+            messagebox.showerror(
+                "Session Notes Report",
+                "PDF generation is unavailable. Install PyMuPDF to enable notes report printing.",
+            )
+            return None
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        patient_name = f"{patient.get('last_name', '')}, {patient.get('first_name', '')}".strip(", ")
+        if not patient_name:
+            patient_name = "Unknown Patient"
+
+        try:
+            doc = fitz.open()
+            page = doc.new_page(width=612, height=792)
+            left = 42
+            right = 570
+            y = 46
+
+            page.insert_text((left, y), "Session Notes Report", fontsize=18, fontname="helv")
+            y += 20
+            page.insert_text((left, y), f"Patient: {patient_name}", fontsize=11, fontname="helv")
+            y += 14
+            page.insert_text((left, y), f"DOB: {fmt_date(patient.get('dob') or '')}", fontsize=10, fontname="helv")
+            y += 14
+            page.insert_text((left, y), f"Printed: {datetime.now().strftime('%m/%d/%Y %I:%M %p')}", fontsize=10, fontname="helv")
+            y += 18
+            page.draw_line((left, y), (right, y), color=(0.6, 0.6, 0.6), width=0.8)
+            y += 12
+
+            for idx, s in enumerate(sessions, start=1):
+                header = (
+                    f"{idx}. Date: {fmt_date(s.get('session_date') or '')}   "
+                    f"Type: {s.get('session_type') or ''}   "
+                    f"CPT: {s.get('cpt_code') or ''}   "
+                    f"Fee: {fmt_money(s.get('fee') or 0)}   "
+                    f"Signed: {'Yes' if s.get('signed') else 'No'}"
+                )
+
+                needed = 130
+                if y + needed > 760:
+                    page = doc.new_page(width=612, height=792)
+                    y = 46
+
+                page.insert_text((left, y), header, fontsize=9.5, fontname="helv")
+                y += 14
+
+                section_order = [
+                    ("Note", s.get("note_text") or ""),
+                    ("Goals", s.get("goals") or ""),
+                    ("Interventions", s.get("interventions") or ""),
+                    ("Response", s.get("response") or ""),
+                    ("Plan", s.get("plan") or ""),
+                ]
+
+                for label, text in section_order:
+                    if not text:
+                        continue
+
+                    block_h = 76
+                    if y + block_h > 770:
+                        page = doc.new_page(width=612, height=792)
+                        y = 46
+
+                    page.insert_text((left, y), f"{label}:", fontsize=9, fontname="helv")
+                    y += 2
+                    used = page.insert_textbox(
+                        fitz.Rect(left + 52, y, right, y + 68),
+                        str(text),
+                        fontsize=9,
+                        fontname="helv",
+                        align=0,
+                    )
+                    y += 70
+
+                    # If text overflowed this box, continue on additional pages.
+                    if used < 0:
+                        remaining = str(text)
+                        while used < 0 and remaining:
+                            page = doc.new_page(width=612, height=792)
+                            y = 46
+                            page.insert_text((left, y), f"{label} (continued):", fontsize=9, fontname="helv")
+                            y += 2
+                            used = page.insert_textbox(
+                                fitz.Rect(left + 52, y, right, y + 700),
+                                remaining,
+                                fontsize=9,
+                                fontname="helv",
+                                align=0,
+                            )
+                            y = 754
+                            break
+
+                y += 4
+                page.draw_line((left, y), (right, y), color=(0.82, 0.82, 0.82), width=0.7)
+                y += 10
+
+            doc.save(str(out_path))
+            doc.close()
+            return out_path
+        except Exception as ex:
+            messagebox.showerror("Session Notes Report", f"Could not generate notes report PDF:\n{ex}")
+            return None
+
+    def _save_notes_report_pdf(self):
+        patient, sessions = self._notes_report_context()
+        if not patient or not sessions:
+            return
+
+        patient_stub = f"{patient.get('last_name', '')}_{patient.get('first_name', '')}".strip("_").replace(" ", "_")
+        out = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+            initialfile=f"SessionNotes_{patient_stub}_{datetime.now().strftime('%Y%m%d')}.pdf",
+        )
+        if not out:
+            return
+
+        saved = self._build_notes_report_pdf(Path(out))
+        if saved:
+            messagebox.showinfo("Session Notes Report", f"Notes report saved:\n{saved}")
+
+    def _print_selected_notes(self):
+        patient, sessions = self._notes_report_context()
+        if not patient or not sessions:
+            return
+
+        pid = int(patient.get("id") or 0)
+        print_path = APP_ROOT / "temp" / f"session_notes_{pid}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        saved = self._build_notes_report_pdf(print_path)
+        if not saved:
+            return
+
+        if sys.platform.startswith("win"):
+            ready = messagebox.askokcancel(
+                "Print Session Notes",
+                "Click OK to send the selected session notes report to the default printer.",
+            )
+            if not ready:
+                return
+            try:
+                os.startfile(str(saved), "print")
+                messagebox.showinfo("Print Session Notes", "Selected notes sent to the default printer.")
+            except OSError as ex:
+                messagebox.showerror("Print Session Notes", f"Could not print selected notes:\n{ex}")
+        else:
+            webbrowser.open(saved.resolve().as_uri())
+            messagebox.showinfo("Print Session Notes", f"Opened notes report for printing:\n{saved}")
 
 
 # ─── Billing Tab ───────────────────────────────────────────────────────────────
