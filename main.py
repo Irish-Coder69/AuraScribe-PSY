@@ -1559,7 +1559,7 @@ class BillingDialog(tk.Toplevel):
             self._load()
         elif pid:
             self._vars["patient_id"].set(str(pid))
-            self._vars["record_date"].set(current_date_str())
+            self._vars["record_date"].set(date.today().strftime("%m/%d/%Y"))
             self._select_patient_by_id(pid)
             self._refresh_session_choices(preferred_sid=self.seed_session_id, auto_prefill=True)
         self.grab_set()
@@ -1585,9 +1585,19 @@ class BillingDialog(tk.Toplevel):
         self._fld("session_id")
 
         ttk.Label(f, text="Record Date*").grid(row=1, column=0, sticky="e", padx=4, pady=4)
-        ttk.Entry(f, textvariable=self._fld("record_date"), width=14).grid(row=1, column=1, sticky="w")
+        self._fld("record_date")
+        if _HAS_CALENDAR:
+            _DateEntry(f, textvariable=self._vars["record_date"], width=12,
+                       date_pattern="MM/dd/yyyy").grid(row=1, column=1, sticky="w")
+        else:
+            ttk.Entry(f, textvariable=self._vars["record_date"], width=14).grid(row=1, column=1, sticky="w")
         ttk.Label(f, text="Service Date").grid(row=1, column=2, sticky="e", padx=4)
-        ttk.Entry(f, textvariable=self._fld("service_date"), width=14).grid(row=1, column=3, sticky="w")
+        self._fld("service_date")
+        if _HAS_CALENDAR:
+            _DateEntry(f, textvariable=self._vars["service_date"], width=12,
+                       date_pattern="MM/dd/yyyy").grid(row=1, column=3, sticky="w")
+        else:
+            ttk.Entry(f, textvariable=self._vars["service_date"], width=14).grid(row=1, column=3, sticky="w")
 
         ttk.Label(f, text="Description").grid(row=2, column=0, sticky="e", padx=4, pady=4)
         ttk.Entry(f, textvariable=self._fld("description"), width=36).grid(row=2, column=1, columnspan=3, sticky="ew")
@@ -1644,7 +1654,10 @@ class BillingDialog(tk.Toplevel):
             if key == "patient_id":
                 continue
             v = r[key] if key in r.keys() else ""
-            var.set(str(v) if v is not None else "")
+            val = str(v) if v is not None else ""
+            if key in ("record_date", "service_date") and val:
+                val = fmt_date(val)
+            var.set(val)
         for i, p in enumerate(self._pts):
             if p["id"] == r["patient_id"]:
                 self.pt_combo.current(i)
@@ -1708,7 +1721,8 @@ class BillingDialog(tk.Toplevel):
         s = self._session_rows[idx]
         self._vars["session_id"].set(str(s.get("id", "") or ""))
 
-        self._vars["service_date"].set(str(s.get("session_date", "") or ""))
+        _raw_sd = str(s.get("session_date", "") or "")
+        self._vars["service_date"].set(fmt_date(_raw_sd) if _raw_sd else "")
         cpt = str(s.get("cpt_code", "") or "")
         stype = str(s.get("session_type", "") or "Session")
         self._vars["description"].set(f"{stype} {cpt}".strip())
@@ -1726,6 +1740,17 @@ class BillingDialog(tk.Toplevel):
         pid = self._pts[sel]["id"]
         data = {k: v.get().strip() for k, v in self._vars.items()}
         data["patient_id"] = pid
+        # Normalize dates to ISO YYYY-MM-DD regardless of display format
+        import datetime as _bdt
+        for _dk in ("record_date", "service_date"):
+            _raw = data.get(_dk, "").strip()
+            if _raw:
+                for _fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+                    try:
+                        data[_dk] = _bdt.datetime.strptime(_raw, _fmt).strftime("%Y-%m-%d")
+                        break
+                    except ValueError:
+                        pass
         if data.get("session_id"):
             try:
                 data["session_id"] = int(data["session_id"])
@@ -2979,6 +3004,19 @@ class CMS1500Tab(ttk.Frame):
             # Multi-line list consumed by cms_pdf mapper
             "service_lines": service_lines,
         }
+
+        # Convert ISO dates to MM/DD/YYYY for display in the editor and on the form
+        _cms_date_fields = (
+            "patient_dob", "insured_dob", "service_date", "illness_date",
+            "other_date", "unable_to_work_from", "unable_to_work_to",
+            "hospitalized_from", "hospitalized_to",
+        )
+        for _df in _cms_date_fields:
+            if data.get(_df):
+                data[_df] = fmt_date(data[_df])
+        for _sl in data.get("service_lines", []):
+            if _sl.get("service_date"):
+                _sl["service_date"] = fmt_date(_sl["service_date"])
 
         for key, var in self._vars.items():
             var.set(str(data.get(key, "")))
