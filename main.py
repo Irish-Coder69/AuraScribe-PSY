@@ -1279,7 +1279,8 @@ class SessionDialog(tk.Toplevel):
             self._load()
         elif pid:
             self._vars["patient_id"].set(str(pid))
-            self._vars["session_date"].set(current_date_str())
+            import datetime as _dt
+            self._vars["session_date"].set(_dt.date.today().strftime("%m/%d/%Y"))
         self.grab_set()
 
     def _fld(self, name, default=""):
@@ -1306,7 +1307,7 @@ class SessionDialog(tk.Toplevel):
             self._date_entry = _DateEntry(
                 top,
                 textvariable=self._vars["session_date"],
-                date_pattern="yyyy-mm-dd",
+                date_pattern="MM/dd/yyyy",
                 width=12,
                 background="#2b579a",
                 foreground="white",
@@ -1429,7 +1430,10 @@ class SessionDialog(tk.Toplevel):
             sd = s["session_date"] or ""
             try:
                 import datetime as _dt
-                self._date_entry.set_date(_dt.date.fromisoformat(sd))
+                d = _dt.date.fromisoformat(sd)
+                self._date_entry.set_date(d)
+                # Update the StringVar to display format so widget shows correctly
+                self._vars["session_date"].set(d.strftime("%m/%d/%Y"))
             except Exception:
                 pass
 
@@ -1491,7 +1495,18 @@ class SessionDialog(tk.Toplevel):
         pid = self._pts[sel]["id"]
         data = {k: v.get().strip() for k, v in self._vars.items()}
         data["patient_id"] = pid
-        if not data.get("session_date"):
+        # Normalise date to YYYY-MM-DD regardless of picker display format
+        raw_date = data.get("session_date", "").strip()
+        if raw_date:
+            import datetime as _dt
+            for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
+                try:
+                    raw_date = _dt.datetime.strptime(raw_date, fmt).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    pass
+        data["session_date"] = raw_date
+        if not raw_date:
             messagebox.showerror("Required", "Session date is required.", parent=self)
             return
         data["note_text"]     = self._nt.get("1.0", "end-1c")
