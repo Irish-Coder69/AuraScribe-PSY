@@ -1556,7 +1556,6 @@ class SessionDialog(tk.Toplevel):
         known_paths = [
             ("Dragon NaturallySpeaking", pf / "Nuance" / "NaturallySpeaking15" / "Program" / "natspeak.exe"),
             ("Dragon NaturallySpeaking", pfx86 / "Nuance" / "NaturallySpeaking15" / "Program" / "natspeak.exe"),
-            ("Windows Speech Recognition", Path(os.environ.get("WINDIR", "C:\\Windows")) / "System32" / "Speech" / "SpeechUX" / "sapi.cpl"),
             ("Whisper Dictate", local / "Programs" / "whisper-dictate" / "whisper-dictate.exe"),
             ("SpeechNotes", local / "Programs" / "SpeechNotes" / "speechnotes.exe"),
             ("Otter.ai Desktop", local / "Programs" / "Otter" / "otter.exe"),
@@ -1661,7 +1660,15 @@ class SessionDialog(tk.Toplevel):
 
     def _launch_dictation_app(self, exe_path):
         try:
-            subprocess.Popen([exe_path])
+            p = str(exe_path or "").strip().strip('"')
+            if not p:
+                self._show_system_dictation_help()
+                return
+            if os.name == "nt" and not p.lower().endswith(".exe"):
+                # Non-executable files (e.g., .cpl) should be opened via Shell.
+                os.startfile(p)
+            else:
+                subprocess.Popen([p])
             self._dict_sv.set("Dictation: external app launched")
         except Exception as ex:
             messagebox.showerror("Launch Failed", f"Could not launch:\n{exe_path}\n\n{ex}", parent=self)
