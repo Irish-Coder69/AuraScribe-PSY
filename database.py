@@ -950,82 +950,80 @@ def get_all_users():
     return rows
 
 
+def get_appointments_for_date(appt_date: str):
+    """Return all appointments for a given date (YYYY-MM-DD), ordered by time."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT a.*, p.last_name, p.first_name, p.phone_cell, p.phone_home
+           FROM appointments a
+           JOIN patients p ON p.id = a.patient_id
+           WHERE a.appt_date=?
+           ORDER BY a.appt_time, a.id""",
+        (appt_date,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_appointments_range(date_from: str, date_to: str):
+    """Return appointments between two dates (inclusive), ordered by date then time."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT a.*, p.last_name, p.first_name, p.phone_cell, p.phone_home
+           FROM appointments a
+           JOIN patients p ON p.id = a.patient_id
+           WHERE a.appt_date BETWEEN ? AND ?
+           ORDER BY a.appt_date, a.appt_time, a.id""",
+        (date_from, date_to)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_upcoming_appointments(days: int = 30):
+    """Return appointments from today forward for the next N days."""
+    from datetime import date, timedelta
+    today = date.today().isoformat()
+    end = (date.today() + timedelta(days=days)).isoformat()
+    return get_appointments_range(today, end)
+
+
+def save_appointment(data: dict):
+    """Insert or update an appointment. Returns the appointment id."""
+    conn = get_connection()
+    cur = conn.cursor()
+    aid = data.pop("id", None)
+    cols = list(data.keys())
+    vals = list(data.values())
+    if aid is None:
+        placeholders = ",".join(["?"] * len(cols))
+        col_str = ",".join(cols)
+        cur.execute(f"INSERT INTO appointments ({col_str}) VALUES ({placeholders})", vals)
+        aid = cur.lastrowid
+    else:
+        set_str = ",".join([f"{c}=?" for c in cols])
+        vals.append(aid)
+        cur.execute(f"UPDATE appointments SET {set_str} WHERE id=?", vals)
+    conn.commit()
+    conn.close()
+    return aid
+
+
+def delete_appointment(aid: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM appointments WHERE id=?", (aid,))
+    conn.commit()
+    conn.close()
+
+
+def get_appointment(aid: int):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM appointments WHERE id=?", (aid,)).fetchone()
+    conn.close()
+    return row
+
+
 def update_user(uid: int, data: dict):
-
-
-    # ΓöÇΓöÇΓöÇ Appointments ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-    def get_appointments_for_date(appt_date: str):
-        """Return all appointments for a given date (YYYY-MM-DD), ordered by time."""
-        conn = get_connection()
-        rows = conn.execute(
-            """SELECT a.*, p.last_name, p.first_name, p.phone_cell, p.phone_home
-               FROM appointments a
-               JOIN patients p ON p.id = a.patient_id
-               WHERE a.appt_date=?
-               ORDER BY a.appt_time, a.id""",
-            (appt_date,)
-        ).fetchall()
-        conn.close()
-        return rows
-
-
-    def get_appointments_range(date_from: str, date_to: str):
-        """Return appointments between two dates (inclusive), ordered by date then time."""
-        conn = get_connection()
-        rows = conn.execute(
-            """SELECT a.*, p.last_name, p.first_name, p.phone_cell, p.phone_home
-               FROM appointments a
-               JOIN patients p ON p.id = a.patient_id
-               WHERE a.appt_date BETWEEN ? AND ?
-               ORDER BY a.appt_date, a.appt_time, a.id""",
-            (date_from, date_to)
-        ).fetchall()
-        conn.close()
-        return rows
-
-
-    def get_upcoming_appointments(days: int = 30):
-        """Return appointments from today forward for the next N days."""
-        from datetime import date, timedelta
-        today = date.today().isoformat()
-        end = (date.today() + timedelta(days=days)).isoformat()
-        return get_appointments_range(today, end)
-
-
-    def save_appointment(data: dict):
-        """Insert or update an appointment. Returns the appointment id."""
-        conn = get_connection()
-        cur = conn.cursor()
-        aid = data.pop("id", None)
-        cols = list(data.keys())
-        vals = list(data.values())
-        if aid is None:
-            placeholders = ",".join(["?"] * len(cols))
-            col_str = ",".join(cols)
-            cur.execute(f"INSERT INTO appointments ({col_str}) VALUES ({placeholders})", vals)
-            aid = cur.lastrowid
-        else:
-            set_str = ",".join([f"{c}=?" for c in cols])
-            vals.append(aid)
-            cur.execute(f"UPDATE appointments SET {set_str} WHERE id=?", vals)
-        conn.commit()
-        conn.close()
-        return aid
-
-
-    def delete_appointment(aid: int):
-        conn = get_connection()
-        conn.execute("DELETE FROM appointments WHERE id=?", (aid,))
-        conn.commit()
-        conn.close()
-
-
-    def get_appointment(aid: int):
-        conn = get_connection()
-        row = conn.execute("SELECT * FROM appointments WHERE id=?", (aid,)).fetchone()
-        conn.close()
-        return row
     """Update an existing user's profile fields. If 'password' is non-empty, reset the password hash."""
     profile_fields = [
         "first_name", "middle_name", "last_name",
