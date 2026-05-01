@@ -257,7 +257,12 @@ def main() -> int:
 
     plan_code = _PLAN_CODES.get(args.plan, 1)
     key = build_license_key(args.name, args.email, args.machine, args.expires, plan=plan_code)
+    sep = "-" * 72
+    print(sep)
+    print("LICENSE KEY (copy everything between the dashes):")
+    print(sep)
     print(key)
+    print(sep)
     print(f"  Name  : {args.name}")
     print(f"  Email : {args.email}")
     print(f"  Plan  : {_PLAN_NAMES[plan_code]}")

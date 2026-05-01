@@ -6685,14 +6685,19 @@ class TheraTrakApp(tk.Tk):
 
         ttk.Label(frm, text="Enter License Key:").grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 2))
         key_var = tk.StringVar(value=current_key)
-        key_entry = ttk.Entry(frm, textvariable=key_var, width=64)
-        key_entry.grid(row=7, column=0, columnspan=3, sticky="ew")
-        key_entry.focus_set()
+        key_text = tk.Text(frm, width=64, height=4, wrap="char", font=("Courier", 9))
+        key_text.grid(row=7, column=0, columnspan=3, sticky="ew")
+        if current_key:
+            key_text.insert("1.0", current_key)
+        key_text.focus_set()
+
+        def _get_key() -> str:
+            return key_text.get("1.0", "end-1c").strip()
 
         result = {"activated": status_ok}
 
         def activate_license():
-            candidate = key_var.get().strip()
+            candidate = _get_key()
             ok, msg, data = _validate_license_key(candidate, machine_code)
             if not ok:
                 messagebox.showerror("License", msg, parent=dlg)
@@ -6713,7 +6718,7 @@ class TheraTrakApp(tk.Tk):
             db.set_app_preference(LICENSE_NAME_PREF_KEY, "")
             db.set_app_preference(LICENSE_EMAIL_PREF_KEY, "")
             db.set_app_preference(LICENSE_ACTIVATED_AT_PREF_KEY, "")
-            key_var.set("")
+            key_text.delete("1.0", "end")
             result["activated"] = False
             messagebox.showinfo("License", "License key removed.", parent=dlg)
 
