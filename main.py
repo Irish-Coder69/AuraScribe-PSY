@@ -60,9 +60,11 @@ except Exception:
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey as _Ed25519PublicKey
     _HAS_ED25519 = True
-except Exception:
+    _ED25519_ERROR: str = ""
+except Exception as _e:
     _Ed25519PublicKey = None  # type: ignore[assignment,misc]
     _HAS_ED25519 = False
+    _ED25519_ERROR = str(_e)
 
 # ─── Colour / Style constants ──────────────────────────────────────────────────
 
@@ -312,7 +314,7 @@ def _validate_license_key(license_key: str, machine_code: str) -> tuple[bool, st
         return False, "No license key entered.", {}
 
     if not _HAS_ED25519 or _Ed25519PublicKey is None:
-        return False, "Cryptographic library unavailable.", {}
+        return False, f"Cryptographic library unavailable: {_ED25519_ERROR}", {}
     pub = _Ed25519PublicKey.from_public_bytes(_LICENSE_PUBLIC_KEY)
 
     # ── V2 legacy: THP1.<base64url_json>.<base64url_sig> ────────────────────
