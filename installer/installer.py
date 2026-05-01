@@ -104,6 +104,40 @@ def _copy_with_retries(src: Path, dst: Path, attempts: int = 8) -> None:
             time.sleep(0.75)
 
 
+def _copy_app_bundle_with_progress(
+    app_bundle: Path,
+    target: Path,
+    progress_cb,
+) -> None:
+    """Copy bundled app payload file-by-file so progress updates stay responsive."""
+    file_pairs: list[tuple[Path, Path]] = []
+
+    for item in sorted(app_bundle.iterdir(), key=lambda p: p.name.lower()):
+        dst_item = target / item.name
+        if item.is_dir():
+            dst_item.mkdir(parents=True, exist_ok=True)
+            for root, dirnames, filenames in os.walk(item):
+                dirnames.sort()
+                filenames.sort()
+                root_path = Path(root)
+                rel_root = root_path.relative_to(item)
+                for dirname in dirnames:
+                    (dst_item / rel_root / dirname).mkdir(parents=True, exist_ok=True)
+                for filename in filenames:
+                    src_file = root_path / filename
+                    dst_file = dst_item / rel_root / filename
+                    file_pairs.append((src_file, dst_file))
+        else:
+            file_pairs.append((item, dst_item))
+
+    total_files = max(1, len(file_pairs))
+    for index, (src_file, dst_file) in enumerate(file_pairs, start=1):
+        dst_file.parent.mkdir(parents=True, exist_ok=True)
+        _copy_with_retries(src_file, dst_file)
+        if index == 1 or index == total_files or index % 25 == 0:
+            progress_cb(index, total_files, src_file.name)
+
+
 def bundled_dir() -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)
@@ -283,6 +317,17 @@ def main() -> int:
     root.withdraw()
     root.attributes("-topmost", True)   # ensure all dialogs appear in front
 
+    proceed = messagebox.askyesno(
+        APP_NAME,
+        "This will install TheraTrak Pro on your computer.\n\n"
+        "Do you want to continue?",
+        parent=root,
+    )
+    if not proceed:
+        messagebox.showinfo(APP_NAME, "Installation canceled.", parent=root)
+        root.destroy()
+        return 0
+
     progress_window = Toplevel(root)
     progress_window.title(f"Installing {APP_NAME}")
     progress_window.resizable(False, False)
@@ -305,11 +350,20 @@ def main() -> int:
     progress_bar.pack(padx=16, pady=(0, 14))
 
     progress_window.update_idletasks()
+    win_w = max(500, progress_window.winfo_reqwidth() + 8)
+    win_h = max(120, progress_window.winfo_reqheight() + 8)
+    win_x = max(0, (progress_window.winfo_screenwidth() - win_w) // 2)
+    win_y = max(0, (progress_window.winfo_screenheight() - win_h) // 2)
+    progress_window.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
+    progress_window.deiconify()
+    progress_window.lift()
+    progress_window.focus_force()
+    progress_window.update()
 
     def set_progress(percent: float, status: str) -> None:
         progress_var.set(max(0, min(100, percent)))
         status_var.set(status)
-        progress_window.update_idletasks()
+        progress_window.update()
 
     source = bundled_dir()
     target = install_dir()
@@ -332,15 +386,13 @@ def main() -> int:
 
     try:
         if app_bundle.exists() and app_bundle.is_dir():
-            items = list(app_bundle.iterdir())
-            item_count = max(1, len(items))
-            for index, item in enumerate(items, start=1):
+            def _on_copy_progress(index: int, total: int, file_name: str) -> None:
                 set_progress(
-                    10 + (50 * (index - 1) / item_count),
-                    f"Copying app files ({index}/{item_count}): {item.name}",
+                    10 + (50 * (index / total)),
+                    f"Copying app files ({index}/{total}): {file_name}",
                 )
-                destination = target / item.name
-                _copy_with_retries(item, destination)
+
+            _copy_app_bundle_with_progress(app_bundle, target, _on_copy_progress)
             set_progress(60, "Application files copied.")
     except Exception as ex:
         progress_window.destroy()
