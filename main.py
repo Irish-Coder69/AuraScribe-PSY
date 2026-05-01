@@ -4614,8 +4614,20 @@ class AppointmentDialog(tk.Toplevel):
 
         ttk.Label(f, text="Date: *").grid(row=1, column=0, sticky="e", padx=(0, 6), pady=4)
         self._date_sv = tk.StringVar(value=prefill_date or date.today().strftime("%m/%d/%Y"))
-        ttk.Entry(f, textvariable=self._date_sv, width=14).grid(row=1, column=1, sticky="w", pady=4)
-        ttk.Label(f, text="(MM/DD/YYYY)", foreground=MUTED).grid(row=1, column=2, sticky="w")
+        if _HAS_CALENDAR:
+            self._date_entry = _DateEntry(
+                f,
+                textvariable=self._date_sv,
+                date_pattern="MM/dd/yyyy",
+                width=12,
+                background="#2b579a",
+                foreground="white",
+                borderwidth=2,
+            )
+            self._date_entry.grid(row=1, column=1, sticky="w", pady=4)
+        else:
+            ttk.Entry(f, textvariable=self._date_sv, width=14).grid(row=1, column=1, sticky="w", pady=4)
+            ttk.Label(f, text="(MM/DD/YYYY)", foreground=MUTED).grid(row=1, column=2, sticky="w")
 
         ttk.Label(f, text="Time:").grid(row=2, column=0, sticky="e", padx=(0, 6), pady=4)
         self._time_sv = tk.StringVar(value="09:00 AM")
@@ -4746,7 +4758,7 @@ class AppointmentBookTab(ttk.Frame):
         ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=8)
         ttk.Label(tb, text="View:").pack(side="left")
         ttk.Combobox(tb, textvariable=self._view_sv,
-                     values=["Day", "Upcoming (30 days)"],
+                     values=["Day", "Next 7 Days", "Upcoming (30 days)"],
                      state="readonly", width=16).pack(side="left", padx=3)
         self._view_sv.trace_add("write", lambda *a: self.refresh())
 
@@ -4824,6 +4836,9 @@ class AppointmentBookTab(ttk.Frame):
             iso = self._sel_date.isoformat()
             rows = db.get_appointments_for_date(iso)
             self._day_lbl.config(text=self._sel_date.strftime("%A, %B %d, %Y"))
+        elif view == "Next 7 Days":
+            rows = db.get_upcoming_appointments(7)
+            self._day_lbl.config(text="Next 7 Days")
         else:
             rows = db.get_upcoming_appointments(30)
             self._day_lbl.config(text="Next 30 Days")
