@@ -1388,6 +1388,13 @@ class SessionDialog(tk.Toplevel):
         note_tab(" Interventions ", "_interventions", 6)
         note_tab(" Response ", "_response", 6)
         note_tab(" Plan ", "_plan", 6)
+        self._dictation_targets = {
+            "Progress Note": self._nt,
+            "Goals Addressed": self._goals,
+            "Interventions": self._interventions,
+            "Response": self._response,
+            "Plan": self._plan,
+        }
 
         # Signed
         bot = ttk.Frame(self, padding=8)
@@ -1401,13 +1408,25 @@ class SessionDialog(tk.Toplevel):
             text="Create/Update Billing Record on Save",
             variable=self.billing_var,
         ).pack(side="left", padx=10)
+        ttk.Label(bot, text="Dictate To").pack(side="left", padx=(8, 4))
+        self._dict_target_var = tk.StringVar(value="Progress Note")
+        ttk.Combobox(
+            bot,
+            textvariable=self._dict_target_var,
+            values=list(self._dictation_targets.keys()),
+            width=16,
+            state="readonly",
+        ).pack(side="left", padx=(0, 4))
         self._dict_sv = tk.StringVar(value="Dictation: idle")
         self._btn_start_dict = btn(bot, "Start Dictation", self._start_dictation)
         self._btn_start_dict.pack(side="left", padx=6)
         self._btn_stop_dict = btn(bot, "Stop Dictation", self._stop_dictation)
         self._btn_stop_dict.pack(side="left", padx=2)
         self._btn_stop_dict.configure(state="disabled")
+        btn(bot, "Check Dictation Setup", self._check_dictation_setup).pack(side="left", padx=4)
+        btn(bot, "Dictation Settings", self._open_dictation_settings).pack(side="left", padx=2)
         ttk.Label(bot, textvariable=self._dict_sv, foreground=MUTED).pack(side="left", padx=8)
+        self._set_dictation_idle_status()
         btn(bot, "Save Session", self._save, "Accent.TButton").pack(side="right", padx=6)
         btn(bot, "Cancel", self.destroy).pack(side="right")
 
@@ -1419,14 +1438,121 @@ class SessionDialog(tk.Toplevel):
                 return p
         return None
 
+    def _get_dictation_readiness(self):
+        issues = []
+        details = []
+
+        if _HAS_OFFLINE_STT:
+            details.append("Packages: installed (vosk, sounddevice)")
+        else:
+            issues.append("Install Python packages 'vosk' and 'sounddevice'.")
+            details.append("Packages: missing")
+
+        model_dir = self._find_vosk_model()
+        if model_dir:
+            details.append(f"Model: found at {model_dir}")
+        else:
+            issues.append("Add a Vosk model folder under APP_ROOT/models (name starts with 'vosk-model').")
+            details.append(f"Model: not found in {VOSK_MODELS_DIR}")
+
+        mic_count = 0
+        if _HAS_OFFLINE_STT:
+            try:
+                devices = _sd.query_devices()
+                mic_count = sum(1 for d in devices if float(d.get("max_input_channels", 0)) > 0)
+            except Exception as ex:
+                issues.append(f"Could not query audio input devices: {ex}")
+
+        if mic_count > 0:
+            details.append(f"Microphone devices: {mic_count} detected")
+        else:
+            issues.append("No microphone input device was detected.")
+            details.append("Microphone devices: none detected")
+
+        ready = len(issues) == 0
+        status = "Dictation: ready" if ready else "Dictation: setup needed"
+        return ready, status, details, issues
+
+    def _set_dictation_idle_status(self):
+        _, status, _, _ = self._get_dictation_readiness()
+        self._dict_sv.set(status)
+
+    def _check_dictation_setup(self):
+        _, status, details, issues = self._get_dictation_readiness()
+        lines = [status, "", "Checks:"]
+        lines.extend([f"- {line}" for line in details])
+        if issues:
+            lines.append("")
+            lines.append("Action Needed:")
+            lines.extend([f"- {issue}" for issue in issues])
+        else:
+            lines.append("")
+            lines.append("Action Needed:")
+            lines.append("- None. Dictation is ready to use.")
+        messagebox.showinfo("Dictation Setup Check", "\n".join(lines), parent=self)
+        self._dict_sv.set(status)
+
     def _append_dictation_text(self, text):
         text = (text or "").strip()
         if not text:
             return
-        current = self._nt.get("1.0", "end-1c").strip()
+        target_name = self._dict_target_var.get().strip()
+        target_widget = self._dictation_targets.get(target_name, self._nt)
+        current = target_widget.get("1.0", "end-1c").strip()
         prefix = "\n" if current else ""
-        self._nt.insert("end", f"{prefix}{text}")
-        self._nt.see("end")
+        target_widget.insert("end", f"{prefix}{text}")
+        target_widget.see("end")
+
+    def _open_models_folder(self):
+        try:
+            VOSK_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            if os.name == "nt":
+                os.startfile(str(VOSK_MODELS_DIR))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(VOSK_MODELS_DIR)])
+            else:
+                subprocess.Popen(["xdg-open", str(VOSK_MODELS_DIR)])
+        except Exception as ex:
+            messagebox.showerror("Open Folder Failed", f"Could not open models folder:\n{ex}", parent=self)
+
+    def _open_dictation_settings(self):
+        _, status, details, issues = self._get_dictation_readiness()
+        win = tk.Toplevel(self)
+        apply_window_icon(win)
+        win.title("Dictation Settings")
+        win.geometry("720x420")
+        win.resizable(True, True)
+        win.transient(self)
+        win.grab_set()
+
+        frm = ttk.Frame(win, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text="Offline Dictation Setup", font=FONT_LG).pack(anchor="w")
+        ttk.Label(frm, text=f"Status: {status}", foreground=MUTED).pack(anchor="w", pady=(4, 8))
+        ttk.Label(frm, text=f"Models Folder: {VOSK_MODELS_DIR}").pack(anchor="w", pady=(0, 6))
+
+        info = tk.Text(frm, height=12, wrap="word", relief="solid", borderwidth=1)
+        info.pack(fill="both", expand=True)
+        lines = ["Checks:"]
+        lines.extend([f"- {line}" for line in details])
+        lines.append("")
+        lines.append("Action Needed:")
+        if issues:
+            lines.extend([f"- {issue}" for issue in issues])
+        else:
+            lines.append("- None. Dictation is ready to use.")
+        lines.append("")
+        lines.append("Model Tip:")
+        lines.append("- Place an extracted model folder named like 'vosk-model-...' under the models folder above.")
+        info.insert("1.0", "\n".join(lines))
+        info.configure(state="disabled")
+
+        btns = ttk.Frame(frm)
+        btns.pack(fill="x", pady=(8, 0))
+        btn(btns, "Open Models Folder", self._open_models_folder).pack(side="left")
+        btn(btns, "Run Setup Check", self._check_dictation_setup).pack(side="left", padx=6)
+        btn(btns, "Close", win.destroy).pack(side="right")
 
     def _dictation_worker(self, model_dir):
         q = queue.Queue()
@@ -1473,7 +1599,7 @@ class SessionDialog(tk.Toplevel):
         self._btn_start_dict.configure(state="normal")
         self._btn_stop_dict.configure(state="disabled")
         if not self._dict_sv.get().startswith("Dictation error"):
-            self._dict_sv.set("Dictation: idle")
+            self._set_dictation_idle_status()
 
     def _start_dictation(self):
         if self._dictating:
