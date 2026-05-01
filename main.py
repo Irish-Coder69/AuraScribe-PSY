@@ -13,6 +13,7 @@ import re
 import hmac
 import hashlib
 import shutil
+import struct
 import subprocess
 import sys
 import threading
@@ -23,7 +24,7 @@ import urllib.request
 import base64
 import uuid
 import webbrowser
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -287,6 +288,14 @@ _LICENSE_PUBLIC_KEY: bytes = bytes.fromhex(
     "557ecad262753de008f00bfba843d01e086344ea13e90afb6b90fd4b601a87d1"
 )
 
+# V3 compact key constants
+_V3_BASE_DATE = date(2026, 1, 1)
+_V3_PLAN_NAMES = {0: "Developer/Test", 1: "Solo Practice", 2: "Group Practice"}
+
+
+def _v3_date_from_days(n: int) -> date:
+    return _V3_BASE_DATE + timedelta(days=n)
+
 
 def _current_machine_code() -> str:
     source = "|".join([
@@ -298,57 +307,90 @@ def _current_machine_code() -> str:
 
 
 def _validate_license_key(license_key: str, machine_code: str) -> tuple[bool, str, dict[str, str]]:
-    normalized = re.sub(r"\s+", "", str(license_key or "").strip())
-    if not normalized:
+    stripped = re.sub(r"\s+", "", str(license_key or "").strip())
+    if not stripped:
         return False, "No license key entered.", {}
 
-    parts = normalized.split(".")
-    if len(parts) != 3 or parts[0] != LICENSE_KEY_PREFIX:
-        return False, "License key format is invalid.", {}
-
-    payload_raw = b""
-    signature_raw = b""
-    try:
-        payload_raw = _b64u_decode(parts[1])
-        signature_raw = _b64u_decode(parts[2])
-    except Exception:
-        return False, "License key payload could not be decoded.", {}
-
     if not _HAS_ED25519 or _Ed25519PublicKey is None:
-        return False, "License key signature is invalid.", {}
-    try:
-        _Ed25519PublicKey.from_public_bytes(_LICENSE_PUBLIC_KEY).verify(signature_raw, payload_raw)
-    except Exception:
-        return False, "License key signature is invalid.", {}
+        return False, "Cryptographic library unavailable.", {}
+    pub = _Ed25519PublicKey.from_public_bytes(_LICENSE_PUBLIC_KEY)
 
-    try:
-        payload = json.loads(payload_raw.decode("utf-8"))
-    except Exception:
-        return False, "License key data is unreadable.", {}
-
-    if not isinstance(payload, dict):
-        return False, "License key payload is invalid.", {}
-
-    bound_machine = str(payload.get("mc") or "").strip().upper()
-    if bound_machine and bound_machine != machine_code.strip().upper():
-        return False, "This license key is for a different computer.", {}
-
-    exp_text = str(payload.get("exp") or "").strip()
-    if exp_text:
+    # ── V2 legacy: THP1.<base64url_json>.<base64url_sig> ────────────────────
+    if stripped.upper().startswith("THP1."):
+        parts = stripped.split(".")
+        if len(parts) != 3:
+            return False, "License key format is invalid.", {}
         try:
-            exp_date = datetime.strptime(exp_text, "%Y-%m-%d").date()
+            payload_raw = _b64u_decode(parts[1])
+            signature_raw = _b64u_decode(parts[2])
+        except Exception:
+            return False, "License key payload could not be decoded.", {}
+        try:
+            pub.verify(signature_raw, payload_raw)
+        except Exception:
+            return False, "License key signature is invalid.", {}
+        try:
+            payload = json.loads(payload_raw.decode("utf-8"))
+        except Exception:
+            return False, "License key data is unreadable.", {}
+        if not isinstance(payload, dict):
+            return False, "License key payload is invalid.", {}
+        bound_machine = str(payload.get("mc") or "").strip().upper()
+        if bound_machine and bound_machine != machine_code.strip().upper():
+            return False, "This license key is for a different computer.", {}
+        exp_text = str(payload.get("exp") or "").strip()
+        if exp_text:
+            try:
+                if date.today() > datetime.strptime(exp_text, "%Y-%m-%d").date():
+                    return False, "This license key has expired.", {}
+            except ValueError:
+                return False, "License expiration date is invalid.", {}
+        return True, "License key is valid.", {
+            "name": str(payload.get("n") or "").strip(),
+            "email": str(payload.get("e") or "").strip(),
+            "machine": bound_machine,
+            "expires": exp_text,
+        }
+
+    # ── V3 compact: THP1-XXXXXX-XXXXXX-... (base32 blocks) ─────────────────
+    body = re.sub(r"^THP1[-\s]*", "", stripped, flags=re.IGNORECASE)
+    clean_b32 = re.sub(r"[^A-Z2-7]", "", body.upper())
+    padded_b32 = clean_b32 + "=" * ((8 - len(clean_b32) % 8) % 8)
+    try:
+        raw = base64.b32decode(padded_b32)
+    except Exception:
+        return False, "License key could not be decoded.", {}
+    if len(raw) < 82:  # 18 payload + 64 sig
+        return False, "License key format is invalid.", {}
+    payload_bytes, sig_bytes = raw[:18], raw[18:82]
+    try:
+        pub.verify(sig_bytes, payload_bytes)
+    except Exception:
+        return False, "License key signature is invalid.", {}
+    plan = payload_bytes[1]
+    expiry_days = struct.unpack(">H", payload_bytes[8:10])[0]
+    mc_bytes = payload_bytes[10:18]
+    if mc_bytes != b"\x00" * 8:
+        cur_mc_hex = machine_code.strip().upper()[:16].ljust(16, "0")
+        try:
+            cur_mc_bytes = bytes.fromhex(cur_mc_hex)
         except ValueError:
-            return False, "License expiration date is invalid.", {}
+            cur_mc_bytes = b"\x00" * 8
+        if mc_bytes != cur_mc_bytes:
+            return False, "This license key is for a different computer.", {}
+    exp_str = ""
+    if expiry_days > 0:
+        exp_date = _v3_date_from_days(expiry_days)
         if date.today() > exp_date:
             return False, "This license key has expired.", {}
-
-    result = {
-        "name": str(payload.get("n") or "").strip(),
-        "email": str(payload.get("e") or "").strip(),
-        "machine": bound_machine,
-        "expires": exp_text,
+        exp_str = exp_date.isoformat()
+    plan_name = _V3_PLAN_NAMES.get(plan, f"Plan {plan}")
+    return True, "License key is valid.", {
+        "name": plan_name,
+        "email": "",
+        "machine": mc_bytes.hex().upper() if mc_bytes != b"\x00" * 8 else "",
+        "expires": exp_str,
     }
-    return True, "License key is valid.", result
 
 
 def _overlay_box_offsets_inches_to_points(offsets: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
