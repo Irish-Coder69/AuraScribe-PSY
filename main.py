@@ -1962,7 +1962,7 @@ class SessionNotesTab(ttk.Frame):
         ttk.Label(dr_row, text="To:").pack(side="left", padx=(8, 2))
         self._date_to_sv = tk.StringVar()
         ttk.Entry(dr_row, textvariable=self._date_to_sv, width=12).pack(side="left", padx=2)
-        ttk.Label(dr_row, text="(YYYY-MM-DD)", foreground=MUTED).pack(side="left", padx=(4, 0))
+        ttk.Label(dr_row, text="(MM/DD/YYYY)", foreground=MUTED).pack(side="left", padx=(4, 0))
         btn(dr_row, "Apply Filter", self.refresh).pack(side="left", padx=6)
         btn(dr_row, "Clear Dates", self._clear_date_filter).pack(side="left", padx=2)
 
@@ -2052,8 +2052,8 @@ class SessionNotesTab(ttk.Frame):
         if not self._pid_filter:
             # Blank until a patient is chosen
             return
-        date_from = self._date_from_sv.get().strip()
-        date_to = self._date_to_sv.get().strip()
+        date_from = self._to_iso_date(self._date_from_sv.get().strip())
+        date_to = self._to_iso_date(self._date_to_sv.get().strip())
         rows = db.get_sessions_for_patient(self._pid_filter)
         if date_from:
             rows = [r for r in rows if self._to_iso_date(r["session_date"]) >= date_from]
