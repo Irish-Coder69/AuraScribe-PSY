@@ -205,6 +205,11 @@ def initialize_db():
         created_at       TEXT DEFAULT (datetime('now')),
         last_login       TEXT DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS app_preferences (
+        pref_key         TEXT PRIMARY KEY,
+        pref_value       TEXT DEFAULT ''
+    );
     """)
 
     conn.commit()
@@ -219,6 +224,7 @@ def initialize_db():
     _migrate_billing_records_table()
     _migrate_users_table()
     _migrate_provider_settings_table()
+    _migrate_app_preferences_table()
     _migrate_bookkeeping_tables()
     _migrate_appointments_table()
     _seed_dsm_codes()
@@ -325,6 +331,47 @@ def _migrate_provider_settings_table():
     for col, col_def in new_columns:
         if col not in existing:
             cur.execute(f"ALTER TABLE provider_settings ADD COLUMN {col} {col_def}")
+    conn.commit()
+    conn.close()
+
+
+def _migrate_app_preferences_table():
+    """Ensure app_preferences exists for lightweight app-wide settings."""
+    conn = get_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_preferences (
+            pref_key   TEXT PRIMARY KEY,
+            pref_value TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_app_preference(pref_key: str, default: str = "") -> str:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT pref_value FROM app_preferences WHERE pref_key=?",
+        (pref_key,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return default
+    return str(row["pref_value"] if row["pref_value"] is not None else default)
+
+
+def set_app_preference(pref_key: str, pref_value: str):
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO app_preferences(pref_key, pref_value)
+        VALUES(?, ?)
+        ON CONFLICT(pref_key) DO UPDATE SET pref_value=excluded.pref_value
+        """,
+        (pref_key, str(pref_value or "")),
+    )
     conn.commit()
     conn.close()
 

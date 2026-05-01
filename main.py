@@ -1293,6 +1293,10 @@ class SessionDialog(tk.Toplevel):
         self._dictating = False
         self._dictation_stop = threading.Event()
         self._dictation_thread = None
+        self._dict_pref_mode = "offline_vosk"
+        self._dict_pref_path = ""
+        self._dict_pref_label = "Built-in Offline Dictation (Vosk)"
+        self._load_dictation_preference()
         self._build()
         if sid:
             self._load()
@@ -1480,8 +1484,64 @@ class SessionDialog(tk.Toplevel):
         return ready, status, details, issues
 
     def _set_dictation_idle_status(self):
+        mode = (self._dict_pref_mode or "offline_vosk").strip().lower()
+        if mode == "windows_builtin":
+            self._dict_sv.set("Dictation: Windows built-in ready (Start uses Win+H)")
+            return
+        if mode == "external_app":
+            app_name = Path(self._dict_pref_path).name if self._dict_pref_path else "configured app"
+            self._dict_sv.set(f"Dictation: external app ready ({app_name})")
+            return
         _, status, _, _ = self._get_dictation_readiness()
         self._dict_sv.set(status)
+
+    def _load_dictation_preference(self):
+        self._dict_pref_mode = (db.get_app_preference("dictation.mode", "offline_vosk") or "offline_vosk").strip()
+        self._dict_pref_path = (db.get_app_preference("dictation.path", "") or "").strip()
+        self._dict_pref_label = (db.get_app_preference("dictation.label", "") or "").strip()
+        if not self._dict_pref_label:
+            if self._dict_pref_mode == "windows_builtin":
+                self._dict_pref_label = "Windows Built-in Dictation (Win+H)"
+            elif self._dict_pref_mode == "external_app":
+                self._dict_pref_label = Path(self._dict_pref_path).name if self._dict_pref_path else "External Dictation App"
+            else:
+                self._dict_pref_label = "Built-in Offline Dictation (Vosk)"
+
+    def _save_dictation_preference(self, mode, path="", label=""):
+        self._dict_pref_mode = (mode or "offline_vosk").strip()
+        self._dict_pref_path = (path or "").strip()
+        self._dict_pref_label = (label or "").strip()
+        if not self._dict_pref_label:
+            if self._dict_pref_mode == "windows_builtin":
+                self._dict_pref_label = "Windows Built-in Dictation (Win+H)"
+            elif self._dict_pref_mode == "external_app":
+                self._dict_pref_label = Path(self._dict_pref_path).name if self._dict_pref_path else "External Dictation App"
+            else:
+                self._dict_pref_label = "Built-in Offline Dictation (Vosk)"
+
+        db.set_app_preference("dictation.mode", self._dict_pref_mode)
+        db.set_app_preference("dictation.path", self._dict_pref_path)
+        db.set_app_preference("dictation.label", self._dict_pref_label)
+        self._set_dictation_idle_status()
+
+    def _trigger_windows_dictation_hotkey(self):
+        if os.name != "nt":
+            return False
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            VK_LWIN = 0x5B
+            VK_H = 0x48
+            KEYEVENTF_KEYUP = 0x0002
+
+            user32.keybd_event(VK_LWIN, 0, 0, 0)
+            user32.keybd_event(VK_H, 0, 0, 0)
+            user32.keybd_event(VK_H, 0, KEYEVENTF_KEYUP, 0)
+            user32.keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0)
+            return True
+        except Exception:
+            return False
 
     def _check_dictation_setup(self):
         _, status, details, issues = self._get_dictation_readiness()
@@ -1680,6 +1740,7 @@ class SessionDialog(tk.Toplevel):
             parent=self,
         )
         if path:
+            self._save_dictation_preference("external_app", path, Path(path).name)
             self._launch_dictation_app(path)
 
     def _show_system_dictation_help(self):
@@ -1736,6 +1797,11 @@ class SessionDialog(tk.Toplevel):
 
         ttk.Label(frm, text="Dictation Settings", font=FONT_LG).pack(anchor="w")
         ttk.Label(frm, text=f"Status: {status}", foreground=MUTED).pack(anchor="w", pady=(4, 8))
+        ttk.Label(
+            frm,
+            text=f"Preferred: {self._dict_pref_label}",
+            foreground=MUTED,
+        ).pack(anchor="w", pady=(0, 8))
 
         # ── Installed dictation apps ──────────────────────────────────────
         ttk.Label(frm, text="Detected Dictation Software:", font=FONT_SM).pack(anchor="w", pady=(0, 2))
@@ -1747,7 +1813,8 @@ class SessionDialog(tk.Toplevel):
             app_labels = {}
             for label, exe in detected:
                 display = f"{label}  —  {Path(exe).name}" if exe else label
-                app_labels[display] = exe
+                mode = "external_app" if exe else "windows_builtin"
+                app_labels[display] = (mode, exe, label)
             app_combo = ttk.Combobox(
                 app_frame,
                 values=list(app_labels.keys()),
@@ -1759,12 +1826,21 @@ class SessionDialog(tk.Toplevel):
 
             def _launch_selected():
                 sel = app_combo.get()
-                exe = app_labels.get(sel)
-                if exe:
+                picked = app_labels.get(sel)
+                if not picked:
+                    return
+                mode, exe, label = picked
+                if mode == "external_app" and exe:
+                    self._save_dictation_preference("external_app", exe, label)
                     self._launch_dictation_app(exe)
                     win.destroy()
                 else:
-                    self._show_system_dictation_help()
+                    self._save_dictation_preference("windows_builtin", "", "Windows Built-in Dictation (Win+H)")
+                    if self._trigger_windows_dictation_hotkey():
+                        self._dict_sv.set("Dictation: Windows built-in listening")
+                    else:
+                        self._show_system_dictation_help()
+                    win.destroy()
 
             btn(app_frame, "Launch", _launch_selected).pack(side="left")
         else:
@@ -1773,6 +1849,12 @@ class SessionDialog(tk.Toplevel):
                 text="No installed dictation apps detected automatically.",
                 foreground=MUTED,
             ).pack(side="left")
+
+        def _use_offline_vosk_default():
+            self._save_dictation_preference("offline_vosk", "", "Built-in Offline Dictation (Vosk)")
+            messagebox.showinfo("Saved", "Default dictation method set to Built-in Offline Dictation (Vosk).", parent=win)
+
+        btn(frm, "Use Built-in Offline Dictation by Default", _use_offline_vosk_default).pack(anchor="w", pady=(0, 6))
 
         btn(frm, "Browse for Dictation App…", self._browse_and_launch_dictation).pack(
             anchor="w", pady=(0, 8)
@@ -1856,6 +1938,27 @@ class SessionDialog(tk.Toplevel):
     def _start_dictation(self):
         if self._dictating:
             return
+        mode = (self._dict_pref_mode or "offline_vosk").strip().lower()
+
+        if mode == "windows_builtin":
+            if self._trigger_windows_dictation_hotkey():
+                self._dict_sv.set("Dictation: Windows built-in listening")
+            else:
+                self._show_system_dictation_help()
+            return
+
+        if mode == "external_app":
+            if self._dict_pref_path:
+                self._launch_dictation_app(self._dict_pref_path)
+                self._dict_sv.set("Dictation: external app started. Speak there, then click Paste Dictation.")
+                return
+            messagebox.showinfo(
+                "Dictation App Not Set",
+                "No default external dictation app path is saved. Open Dictation Settings and choose Launch once.",
+                parent=self,
+            )
+            return
+
         if not _HAS_OFFLINE_STT:
             messagebox.showerror(
                 "Offline Dictation Unavailable",
