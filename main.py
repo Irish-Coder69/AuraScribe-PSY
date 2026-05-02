@@ -641,7 +641,11 @@ def ttk_style():
     style.configure("Accent.TButton", background=ACCENT, foreground="white", font=("Arial", _fs, "bold"), padding=5)
     style.map("Accent.TButton", background=[("active", ACCENT2), ("pressed", ACCENT2)])
     style.configure("Danger.TButton", background=DANGER, foreground="white", font=("Arial", _fs, "bold"), padding=5)
-    _row_h = 22 if _fs <= 11 else 24
+    # Derive row height from actual font metrics so text is not clipped on
+    # high-DPI laptop displays.
+    _font_metrics = tkFont.Font(root=style.master, font=FONT_UI).metrics()
+    _line_h = int(_font_metrics.get("linespace", 16))
+    _row_h = max(24, _line_h + 8)
     style.configure("Treeview", font=FONT_UI, rowheight=_row_h, background=ROW_ODD, fieldbackground=ROW_ODD)
     style.configure("Treeview.Heading", font=("Arial", _fs, "bold"), background=HDR_BG, foreground="white")
     style.map("Treeview", background=[("selected", SEL_BG)], foreground=[("selected", "#1e3a5f")])
@@ -1267,9 +1271,9 @@ class DSMPicker(tk.Toplevel):
         self.tv.heading("code",        text="Code",       anchor="w")
         self.tv.heading("description", text="Description",anchor="w")
         self.tv.heading("category",    text="Category",   anchor="w")
-        self.tv.column("code",        width=80,  stretch=False)
+        self.tv.column("code",        width=130, minwidth=110, stretch=False)
         self.tv.column("description", width=400, stretch=True)
-        self.tv.column("category",    width=140, stretch=False)
+        self.tv.column("category",    width=220, minwidth=180, stretch=False)
         sb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=sb.set)
         self.tv.pack(side="left", fill="both", expand=True)
