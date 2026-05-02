@@ -116,8 +116,41 @@ LICENSE_EMAIL_PREF_KEY = "license_registered_email"
 
 # Screen dimensions populated once at startup by TheraTrakApp.__init__.
 # Every dialog reads these instead of calling winfo_screen* individually.
-SCREEN_W: int = 0
-SCREEN_H: int = 0
+SCREEN_W:     int   = 0
+SCREEN_H:     int   = 0
+MACHINE_TYPE: str   = "unknown"  # "laptop", "desktop", or "unknown"
+SCREEN_DPI:   int   = 96         # logical pixels per inch (96 = 100 % scaling)
+UI_SCALE:     float = 1.0        # SCREEN_DPI / 96
+
+
+def _detect_machine_type() -> str:
+    """Return 'laptop', 'desktop', or 'unknown'.
+
+    Uses the Windows GetSystemPowerStatus API: if a system battery is reported
+    the machine is treated as a laptop/portable device; otherwise a desktop.
+    No external packages required — only the ctypes stdlib module.
+    """
+    if sys.platform != "win32":
+        return "unknown"
+    try:
+        import ctypes as _ct
+
+        class _SYSTEM_POWER_STATUS(_ct.Structure):
+            _fields_ = [
+                ("ACLineStatus",        _ct.c_byte),
+                ("BatteryFlag",         _ct.c_byte),   # 128 = no system battery
+                ("BatteryLifePercent",  _ct.c_byte),
+                ("SystemStatusFlag",    _ct.c_byte),
+                ("BatteryLifeTime",     _ct.c_ulong),
+                ("BatteryFullLifeTime", _ct.c_ulong),
+            ]
+
+        _ps = _SYSTEM_POWER_STATUS()
+        if _ct.windll.kernel32.GetSystemPowerStatus(_ct.byref(_ps)):
+            return "laptop" if _ps.BatteryFlag != 128 else "desktop"
+    except Exception:
+        pass
+    return "unknown"
 
 
 def _screen_fit(desired_w: int, desired_h: int, pad: int = 80) -> tuple[int, int]:
@@ -557,22 +590,24 @@ def ttk_style():
         style.theme_use("clam")
     except Exception:
         pass
-    style.master.option_add("*Font", ("Arial", 12))
-    style.master.option_add("*Text.Font", ("Arial", 12))
-    style.master.option_add("*Entry.Font", ("Arial", 12))
+    _fs = FONT_UI[1]  # honours adaptive size set by TheraTrakApp.__init__
+    style.master.option_add("*Font",       ("Arial", _fs))
+    style.master.option_add("*Text.Font",  ("Arial", _fs))
+    style.master.option_add("*Entry.Font", ("Arial", _fs))
     style.configure("TFrame", background=BG)
     style.configure("TLabel", background=BG, font=FONT_UI)
     style.configure("TButton", font=FONT_UI, padding=4)
     style.configure("TEntry", font=FONT_UI, padding=3)
     style.configure("TCombobox", font=FONT_UI)
     style.configure("TNotebook", background=HDR_BG, tabmargins=[2, 4, 2, 0])
-    style.configure("TNotebook.Tab", background=HDR_BG, foreground="white", font=("Arial", 12, "bold"), padding=[10, 5])
+    style.configure("TNotebook.Tab", background=HDR_BG, foreground="white", font=("Arial", _fs, "bold"), padding=[10, 5])
     style.map("TNotebook.Tab", background=[("selected", BG), ("active", ACCENT)], foreground=[("selected", HDR_BG), ("active", "white")])
-    style.configure("Accent.TButton", background=ACCENT, foreground="white", font=("Arial", 12, "bold"), padding=5)
+    style.configure("Accent.TButton", background=ACCENT, foreground="white", font=("Arial", _fs, "bold"), padding=5)
     style.map("Accent.TButton", background=[("active", ACCENT2), ("pressed", ACCENT2)])
-    style.configure("Danger.TButton", background=DANGER, foreground="white", font=("Arial", 12, "bold"), padding=5)
-    style.configure("Treeview", font=FONT_UI, rowheight=24, background=ROW_ODD, fieldbackground=ROW_ODD)
-    style.configure("Treeview.Heading", font=("Arial", 12, "bold"), background=HDR_BG, foreground="white")
+    style.configure("Danger.TButton", background=DANGER, foreground="white", font=("Arial", _fs, "bold"), padding=5)
+    _row_h = 22 if _fs <= 11 else 24
+    style.configure("Treeview", font=FONT_UI, rowheight=_row_h, background=ROW_ODD, fieldbackground=ROW_ODD)
+    style.configure("Treeview.Heading", font=("Arial", _fs, "bold"), background=HDR_BG, foreground="white")
     style.map("Treeview", background=[("selected", SEL_BG)], foreground=[("selected", "#1e3a5f")])
     return style
 
@@ -636,7 +671,8 @@ class UserDirectoryDialog(tk.Toplevel):
         super().__init__(parent)
         apply_window_icon(self)
         self.title("User Directory")
-        self.geometry(f"{max(1150, SCREEN_W - 30)}x{max(540, SCREEN_H - 90)}+0+0")
+        _w, _h = _screen_fit(max(900, SCREEN_W - 30), max(480, SCREEN_H - 90), pad=0)
+        self.geometry(f"{_w}x{_h}+0+0")
         self.resizable(True, True)
         try:
             self.state("zoomed")
@@ -842,7 +878,8 @@ class CreateAccountDialog(tk.Toplevel):
         apply_window_icon(self)
         self.after_create = after_create
         self.title("Create Account")
-        self.geometry(f"{max(1000, SCREEN_W - 30)}x{max(700, SCREEN_H - 90)}+0+0")
+        _w, _h = _screen_fit(max(900, SCREEN_W - 30), max(560, SCREEN_H - 90), pad=0)
+        self.geometry(f"{_w}x{_h}+0+0")
         self.resizable(True, True)
         try:
             self.state("zoomed")
@@ -1057,7 +1094,8 @@ class LoginDialog(tk.Toplevel):
         apply_window_icon(self)
         self.user = None
         self.title("TheraTrak Pro Login")
-        self.geometry(f"{max(1000, SCREEN_W - 30)}x{max(700, SCREEN_H - 90)}+0+0")
+        _w, _h = _screen_fit(max(900, SCREEN_W - 30), max(560, SCREEN_H - 90), pad=0)
+        self.geometry(f"{_w}x{_h}+0+0")
         self.resizable(True, True)
         try:
             self.state("zoomed")
@@ -6371,16 +6409,37 @@ class TheraTrakApp(tk.Tk):
         self._version = vm.get_version_string()
         self.title(f"TheraTrak Pro - {self._version}")
 
-        # Capture screen dimensions once so all dialogs can reference the
-        # module-level globals without querying the display again.
-        global SCREEN_W, SCREEN_H
-        SCREEN_W = self.winfo_screenwidth()
-        SCREEN_H = self.winfo_screenheight()
+        # ── Detect display and hardware environment once at startup ──────────
+        global SCREEN_W, SCREEN_H, MACHINE_TYPE, SCREEN_DPI, UI_SCALE
+        SCREEN_W     = self.winfo_screenwidth()
+        SCREEN_H     = self.winfo_screenheight()
+        MACHINE_TYPE = _detect_machine_type()
+        try:
+            SCREEN_DPI = int(self.winfo_fpixels("1i"))  # pixels per inch
+            UI_SCALE   = SCREEN_DPI / 96.0
+        except Exception:
+            pass
+        _append_startup_log(
+            f"Display: {SCREEN_W}x{SCREEN_H}  DPI: {SCREEN_DPI}  "
+            f"Scale: {UI_SCALE:.2f}x  Machine: {MACHINE_TYPE}"
+        )
+
+        # Adapt base font size for small/laptop screens so the UI fits without
+        # scrolling.  Screens narrower than 1280px or shorter than 900px (typical
+        # laptop) use 11pt; everything else keeps the default 12pt.
+        global FONT_UI, FONT_SM, FONT_LG, FONT_H1, FONT_MONO
+        _fsize = 11 if (SCREEN_H < 900 or SCREEN_W < 1280) else 12
+        if _fsize != 12:
+            FONT_UI   = ("Arial", _fsize)
+            FONT_SM   = ("Arial", _fsize)
+            FONT_LG   = ("Arial", _fsize, "bold")
+            FONT_H1   = ("Arial", _fsize, "bold")
+            FONT_MONO = ("Arial", _fsize)
 
         win_w = min(1280, SCREEN_W - 40)
-        win_h = min(820, SCREEN_H - 60)
+        win_h = min(820,  SCREEN_H - 60)
         self.geometry(f"{win_w}x{win_h}+{(SCREEN_W-win_w)//2}+{(SCREEN_H-win_h)//2}")
-        self.minsize(900, 600)
+        self.minsize(800, 540)
 
         self._style = ttk_style()
 
