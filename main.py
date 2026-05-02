@@ -6624,6 +6624,7 @@ class TheraTrakApp(tk.Tk):
         help_menu.add_command(label="Check for Updates", command=self._check_for_updates)
         help_menu.add_command(label="License Registration", command=self._open_license_registration)
         help_menu.add_command(label="User Guide", command=self._open_user_guide)
+        help_menu.add_command(label="Display Diagnostics", command=self._show_display_diagnostics)
         help_menu.add_command(label="About TheraTrak Pro", command=self._about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
@@ -6737,6 +6738,70 @@ class TheraTrakApp(tk.Tk):
         sb.pack(side="right", fill="y")
         txt.insert("1.0", content)
         txt.configure(state="disabled")
+
+    def _show_display_diagnostics(self):
+        cur_w = self.winfo_screenwidth()
+        cur_h = self.winfo_screenheight()
+        try:
+            cur_dpi = int(self.winfo_fpixels("1i"))
+            cur_scale = cur_dpi / 96.0
+        except Exception:
+            cur_dpi = SCREEN_DPI
+            cur_scale = UI_SCALE
+
+        machine = MACHINE_TYPE or "unknown"
+        startup_log = STARTUP_LOG_FILE
+
+        lines = [
+            "TheraTrak Pro Display Diagnostics",
+            "",
+            f"Version: {self._version}",
+            f"Platform: {platform.platform()}",
+            f"Python: {sys.version.split()[0]}",
+            "",
+            f"Machine Type: {machine}",
+            f"Startup Display (cached): {SCREEN_W} x {SCREEN_H}",
+            f"Current Display (live): {cur_w} x {cur_h}",
+            f"Startup DPI (cached): {SCREEN_DPI}",
+            f"Current DPI (live): {cur_dpi}",
+            f"Startup UI Scale (cached): {UI_SCALE:.2f}x",
+            f"Current UI Scale (live): {cur_scale:.2f}x",
+            f"Base UI Font Size: {FONT_UI[1]} pt",
+            "",
+            f"Database: {db.DB_PATH}",
+            f"Startup Log: {startup_log}",
+        ]
+        diagnostics_text = "\n".join(lines)
+
+        dlg = tk.Toplevel(self)
+        apply_window_icon(dlg)
+        dlg.title("Display Diagnostics")
+        dlg.geometry("760x460")
+        dlg.minsize(620, 360)
+        dlg.transient(self)
+
+        frm = ttk.Frame(dlg, padding=10)
+        frm.pack(fill="both", expand=True)
+
+        txt = tk.Text(frm, wrap="word", font=FONT_MONO, relief="solid", borderwidth=1)
+        sb = ttk.Scrollbar(frm, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        txt.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        txt.insert("1.0", diagnostics_text)
+        txt.configure(state="disabled")
+
+        btns = ttk.Frame(dlg, padding=(10, 0, 10, 10))
+        btns.pack(fill="x")
+
+        def _copy_diag():
+            self.clipboard_clear()
+            self.clipboard_append(diagnostics_text)
+            self.update()
+            messagebox.showinfo("Display Diagnostics", "Diagnostics copied to clipboard.", parent=dlg)
+
+        btn(btns, "Copy Diagnostics", _copy_diag, "Accent.TButton").pack(side="left", padx=4)
+        btn(btns, "Close", dlg.destroy).pack(side="left", padx=4)
 
     def _about(self):
         user_line = ""
