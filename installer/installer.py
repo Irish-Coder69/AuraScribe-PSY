@@ -313,9 +313,22 @@ def write_uninstall_registry(target: Path, uninstall_cmd: Path, version: str) ->
 
 
 def main() -> int:
+    # Enable per-monitor DPI awareness before creating the Tk root so the
+    # installer window is sized correctly on HiDPI displays.
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
     root = Tk()
     root.withdraw()
     root.attributes("-topmost", True)   # ensure all dialogs appear in front
+
+    screen_w = root.winfo_screenwidth()
+    screen_h = root.winfo_screenheight()
 
     proceed = messagebox.askyesno(
         APP_NAME,
@@ -352,8 +365,8 @@ def main() -> int:
     progress_window.update_idletasks()
     win_w = max(500, progress_window.winfo_reqwidth() + 8)
     win_h = max(120, progress_window.winfo_reqheight() + 8)
-    win_x = max(0, (progress_window.winfo_screenwidth() - win_w) // 2)
-    win_y = max(0, (progress_window.winfo_screenheight() - win_h) // 2)
+    win_x = max(0, (screen_w - win_w) // 2)
+    win_y = max(0, (screen_h - win_h) // 2)
     progress_window.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
     progress_window.deiconify()
     progress_window.lift()
