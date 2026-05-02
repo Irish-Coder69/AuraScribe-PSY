@@ -113,6 +113,30 @@ LICENSE_KEY_PREFIX = "THP1"
 LICENSE_PREF_KEY = "license_key"
 LICENSE_NAME_PREF_KEY = "license_registered_name"
 LICENSE_EMAIL_PREF_KEY = "license_registered_email"
+
+# Screen dimensions populated once at startup by TheraTrakApp.__init__.
+# Every dialog reads these instead of calling winfo_screen* individually.
+SCREEN_W: int = 0
+SCREEN_H: int = 0
+
+
+def _screen_fit(desired_w: int, desired_h: int, pad: int = 80) -> tuple[int, int]:
+    """Return (w, h) capped to the available screen minus *pad* on each axis.
+
+    Reads the module-level SCREEN_W / SCREEN_H that are set once at startup.
+    Falls back to a live query if they have not been populated yet.
+    """
+    sw, sh = SCREEN_W, SCREEN_H
+    if sw == 0 or sh == 0:
+        try:
+            root = tk._default_root  # type: ignore[attr-defined]
+            if root is not None:
+                sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        except Exception:
+            pass
+    if sw == 0 or sh == 0:
+        return desired_w, desired_h
+    return min(desired_w, max(sw - pad, 200)), min(desired_h, max(sh - pad, 150))
 LICENSE_ACTIVATED_AT_PREF_KEY = "license_activated_at"
 LICENSE_TRIAL_START_PREF_KEY = "license_trial_start"
 LICENSE_TRIAL_DAYS = 14
@@ -612,9 +636,7 @@ class UserDirectoryDialog(tk.Toplevel):
         super().__init__(parent)
         apply_window_icon(self)
         self.title("User Directory")
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        self.geometry(f"{max(1150, screen_w - 30)}x{max(540, screen_h - 90)}+0+0")
+        self.geometry(f"{max(1150, SCREEN_W - 30)}x{max(540, SCREEN_H - 90)}+0+0")
         self.resizable(True, True)
         try:
             self.state("zoomed")
@@ -820,9 +842,7 @@ class CreateAccountDialog(tk.Toplevel):
         apply_window_icon(self)
         self.after_create = after_create
         self.title("Create Account")
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        self.geometry(f"{max(1000, screen_w - 30)}x{max(700, screen_h - 90)}+0+0")
+        self.geometry(f"{max(1000, SCREEN_W - 30)}x{max(700, SCREEN_H - 90)}+0+0")
         self.resizable(True, True)
         try:
             self.state("zoomed")
@@ -1037,9 +1057,7 @@ class LoginDialog(tk.Toplevel):
         apply_window_icon(self)
         self.user = None
         self.title("TheraTrak Pro Login")
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        self.geometry(f"{max(1000, screen_w - 30)}x{max(700, screen_h - 90)}+0+0")
+        self.geometry(f"{max(1000, SCREEN_W - 30)}x{max(700, SCREEN_H - 90)}+0+0")
         self.resizable(True, True)
         try:
             self.state("zoomed")
@@ -1130,7 +1148,8 @@ class DSMPicker(tk.Toplevel):
         super().__init__(parent)
         apply_window_icon(self)
         self.title("DSM-5 / ICD-10 Code Lookup")
-        self.geometry("680x480")
+        _w, _h = _screen_fit(680, 480)
+        self.geometry(f"{_w}x{_h}")
         self.resizable(True, True)
         self.callback = callback
         self.result = None
@@ -1199,9 +1218,13 @@ class PatientDialog(tk.Toplevel):
         self.pid = pid
         self.on_save = on_save
         self.title("Edit Patient" if pid else "New Patient")
-        self.geometry("820x680")
+        _w, _h = _screen_fit(820, 680)
+        self.geometry(f"{_w}x{_h}")
         self.resizable(True, True)
-        self.state('zoomed')
+        try:
+            self.state('zoomed')
+        except tk.TclError:
+            pass
         self._vars = {}
         self._build()
         if pid:
@@ -1430,7 +1453,8 @@ class SessionDialog(tk.Toplevel):
         try:
             self.state("zoomed")
         except Exception:
-            self.geometry("1100x780")
+            _w, _h = _screen_fit(1100, 780)
+            self.geometry(f"{_w}x{_h}")
         self._vars = {}
         self._dictating = False
         self._active_dictation_mode = None
@@ -2356,8 +2380,9 @@ class BillingDialog(tk.Toplevel):
         self.seed_session_id = seed_session_id
         self.on_save = on_save
         self.title("Edit Record" if rid else "New Billing Record")
-        self.geometry("560x420")
-        self.resizable(False, False)
+        _w, _h = _screen_fit(560, 420)
+        self.geometry(f"{_w}x{_h}")
+        self.resizable(True, True)
         self._vars = {}
         self._session_rows = []
         self._build()
@@ -6247,8 +6272,9 @@ class VersionManagerDialog(tk.Toplevel):
         super().__init__(parent)
         self.on_change = on_change
         self.title("Version Manager")
-        self.geometry("420x280")
-        self.resizable(False, False)
+        _w, _h = _screen_fit(420, 280)
+        self.geometry(f"{_w}x{_h}")
+        self.resizable(True, True)
         self._build()
         self._refresh()
         self.grab_set()
@@ -6344,11 +6370,16 @@ class TheraTrakApp(tk.Tk):
         self.current_user = current_user
         self._version = vm.get_version_string()
         self.title(f"TheraTrak Pro - {self._version}")
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        win_w = min(1280, screen_w - 40)
-        win_h = min(820, screen_h - 60)
-        self.geometry(f"{win_w}x{win_h}+{(screen_w-win_w)//2}+{(screen_h-win_h)//2}")
+
+        # Capture screen dimensions once so all dialogs can reference the
+        # module-level globals without querying the display again.
+        global SCREEN_W, SCREEN_H
+        SCREEN_W = self.winfo_screenwidth()
+        SCREEN_H = self.winfo_screenheight()
+
+        win_w = min(1280, SCREEN_W - 40)
+        win_h = min(820, SCREEN_H - 60)
+        self.geometry(f"{win_w}x{win_h}+{(SCREEN_W-win_w)//2}+{(SCREEN_H-win_h)//2}")
         self.minsize(900, 600)
 
         self._style = ttk_style()
@@ -7064,6 +7095,19 @@ class TheraTrakApp(tk.Tk):
 # ─── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Enable per-monitor DPI awareness on Windows so winfo_screenwidth/height
+    # returns physical pixels and widgets are sized correctly on HiDPI displays.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            # Per-Monitor v2 awareness (Windows 10 1703+)
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
     _install_crash_logger()
     _startup_self_check()
     try:
@@ -7086,9 +7130,7 @@ if __name__ == "__main__":
             try:
                 app.state("zoomed")
             except tk.TclError:
-                screen_w = app.winfo_screenwidth()
-                screen_h = app.winfo_screenheight()
-                app.geometry(f"{screen_w}x{screen_h}+0+0")
+                app.geometry(f"{SCREEN_W}x{SCREEN_H}+0+0")
             app.mainloop()
         else:
             app.destroy()
