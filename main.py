@@ -6610,26 +6610,47 @@ class TheraTrakApp(tk.Tk):
         SCREEN_FIT_W = int(_mp.get("min_work_w", SCREEN_W))
         SCREEN_FIT_H = int(_mp.get("min_work_h", SCREEN_H))
         UI_MAX_SCALE = float(_mp.get("max_scale", UI_SCALE))
-        UI_DENSE_MODE = (SCREEN_FIT_W < 1600 or SCREEN_FIT_H < 980 or UI_MAX_SCALE >= 1.25)
+
+        # Supplement DPI detection via Windows registry — reliable regardless of
+        # the process's DPI-awareness context (per-monitor, system, or unaware).
+        if sys.platform == "win32":
+            try:
+                import winreg as _wr
+                with _wr.OpenKey(_wr.HKEY_CURRENT_USER, r"Control Panel\Desktop") as _k:
+                    _reg_dpi, _ = _wr.QueryValueEx(_k, "LogPixels")
+                    if _reg_dpi and int(_reg_dpi) > 0:
+                        _reg_scale = int(_reg_dpi) / 96.0
+                        UI_MAX_SCALE = max(UI_MAX_SCALE, _reg_scale)
+                        UI_SCALE     = max(UI_SCALE,     _reg_scale)
+            except Exception:
+                pass
+
+        # With SetProcessDpiAwareness(2) active, Tkinter reports physical pixels
+        # but widget metrics (font heights, button sizes) scale with DPI — so
+        # fewer items fit per physical pixel.  Convert to effective logical pixels
+        # (physical ÷ DPI-scale) so all density decisions are DPI-independent.
+        _log_w = int(SCREEN_FIT_W / UI_MAX_SCALE) if UI_MAX_SCALE > 1.05 else SCREEN_FIT_W
+        _log_h = int(SCREEN_FIT_H / UI_MAX_SCALE) if UI_MAX_SCALE > 1.05 else SCREEN_FIT_H
+        UI_DENSE_MODE = (_log_w < 1600 or _log_h < 980)
         _append_startup_log(
             f"Display: {SCREEN_W}x{SCREEN_H}  DPI: {SCREEN_DPI}  "
             f"Scale: {UI_SCALE:.2f}x  Machine: {MACHINE_TYPE}"
         )
         _append_startup_log(
             f"Monitors: {_mp.get('count', 1)}  FitArea: {SCREEN_FIT_W}x{SCREEN_FIT_H}  "
-            f"MaxScale: {UI_MAX_SCALE:.2f}x  DenseMode: {'yes' if UI_DENSE_MODE else 'no'}"
+            f"MaxScale: {UI_MAX_SCALE:.2f}x  Logical: {_log_w}x{_log_h}  "
+            f"DenseMode: {'yes' if UI_DENSE_MODE else 'no'}"
         )
 
-        # Adapt base font size for small/laptop screens so the UI fits without
-        # scrolling.  Screens narrower than 1280px or shorter than 900px (typical
-        # laptop) use 11pt; everything else keeps the default 12pt.
+        # Adapt base font size using logical (DPI-independent) dimensions so
+        # thresholds behave the same on every display density.
         global FONT_UI, FONT_SM, FONT_LG, FONT_H1, FONT_MONO
         _fsize = 12
-        if SCREEN_FIT_H < 820 or SCREEN_FIT_W < 1180 or UI_MAX_SCALE >= 1.60:
+        if _log_h < 720 or _log_w < 1050:
             _fsize = 9
-        elif SCREEN_FIT_H < 900 or SCREEN_FIT_W < 1366 or UI_MAX_SCALE >= 1.35:
+        elif _log_h < 900 or _log_w < 1366:
             _fsize = 10
-        elif SCREEN_FIT_H < 1020 or SCREEN_FIT_W < 1600 or UI_MAX_SCALE >= 1.15:
+        elif _log_h < 1020 or _log_w < 1600:
             _fsize = 11
         if _fsize != 12:
             FONT_UI   = ("Arial", _fsize)
@@ -6638,12 +6659,14 @@ class TheraTrakApp(tk.Tk):
             FONT_H1   = ("Arial", _fsize, "bold")
             FONT_MONO = ("Arial", _fsize)
 
-        _fit_w = SCREEN_FIT_W or SCREEN_W
-        _fit_h = SCREEN_FIT_H or SCREEN_H
-        win_w = min(1280, max(980, _fit_w - 28))
-        win_h = min(820,  max(620, _fit_h - 56))
+        # Window size: first decide the target in logical pixels, then convert
+        # to physical pixels for geometry() (which uses physical px when DPI-aware).
+        _win_log_w = min(1280, max(980, _log_w - 22))
+        _win_log_h = min(820,  max(620, _log_h - 44))
+        win_w = min(SCREEN_FIT_W - 16, int(_win_log_w * UI_MAX_SCALE))
+        win_h = min(SCREEN_FIT_H - 44, int(_win_log_h * UI_MAX_SCALE))
         self.geometry(f"{win_w}x{win_h}+{(SCREEN_W-win_w)//2}+{(SCREEN_H-win_h)//2}")
-        self.minsize(800, 540)
+        self.minsize(int(800 * UI_MAX_SCALE), int(540 * UI_MAX_SCALE))
 
         self._style = ttk_style()
 
