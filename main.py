@@ -1049,7 +1049,13 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
             except OSError:
                 pass
 
-    found.sort(key=lambda item: (item[0].lower(), item[1].lower()))
+    def _dragon_first(item):
+        lbl = item[0].lower()
+        if "dragon" in lbl or "naturallyspeaking" in lbl or "natspeak" in (item[1] or "").lower():
+            return (0, lbl)
+        return (1, lbl)
+
+    found.sort(key=_dragon_first)
     return built_in + found
 
 
@@ -2077,6 +2083,7 @@ class SessionDialog(tk.Toplevel):
         self._dict_pref_path = ""
         self._dict_pref_label = "Built-in Offline Dictation (Vosk)"
         self._load_dictation_preference()
+        self._auto_paste_after_dictation = tk.BooleanVar(value=False)
         self._scan_dictation_apps_async()
         self._build()
         if sid:
@@ -2221,6 +2228,7 @@ class SessionDialog(tk.Toplevel):
         self._btn_stop_dict.pack(side="left", padx=2)
         self._btn_stop_dict.configure(state="disabled")
         btn(bot, "Paste Dictation", self._paste_dictation_from_clipboard).pack(side="left", padx=2)
+        ttk.Checkbutton(bot, text="Auto-paste", variable=self._auto_paste_after_dictation).pack(side="left", padx=(0, 6))
         btn(bot, "Check Dictation Setup", self._check_dictation_setup).pack(side="left", padx=4)
         btn(bot, "Dictation Settings", self._open_dictation_settings).pack(side="left", padx=2)
         ttk.Label(bot, textvariable=self._dict_sv, foreground=MUTED).pack(side="left", padx=8)
@@ -2522,12 +2530,29 @@ class SessionDialog(tk.Toplevel):
         
         btn(header_frame, "Rescan for Software", _rescan).pack(side="right")
 
+        # Use cached apps if available, otherwise scan now
+        detected = self._cached_dictation_apps if self._cached_dictation_apps else self._find_dictation_apps()
+
+        # ── Dragon quick-launch (shown only when Dragon is detected) ──────
+        dragon_apps = [(lbl, exe) for lbl, exe in detected
+                       if "dragon" in lbl.lower() or "natspeak" in (exe or "").lower()]
+        if dragon_apps:
+            dragon_frame = ttk.LabelFrame(frm, text="Dragon NaturallySpeaking (Detected)", padding=8)
+            dragon_frame.pack(fill="x", pady=(0, 6))
+            dlbl, dexe = dragon_apps[0]
+            ttk.Label(dragon_frame, text=f"Found: {dlbl}", foreground=SUCCESS).pack(side="left", padx=(0, 10))
+
+            def _dragon_one_click(_exe=dexe, _lbl=dlbl):
+                self._save_dictation_preference("external_app", _exe, _lbl)
+                self._launch_dictation_app(_exe)
+                win.destroy()
+
+            btn(dragon_frame, "Set Default & Launch Dragon", _dragon_one_click, style="Accent.TButton").pack(side="left")
+
         # ── Installed dictation apps ──────────────────────────────────────
         app_frame = ttk.LabelFrame(frm, text="Select and Launch", padding=8)
         app_frame.pack(fill="x", pady=(0, 10))
 
-        # Use cached apps if available, otherwise scan now
-        detected = self._cached_dictation_apps if self._cached_dictation_apps else self._find_dictation_apps()
         if detected:
             app_labels = {}
             for label, exe in detected:
@@ -2628,6 +2653,22 @@ class SessionDialog(tk.Toplevel):
         lines.append("- Place an extracted vosk-model-* folder under the models folder above.")
         info.insert("1.0", "\n".join(lines))
         info.configure(state="disabled")
+
+        # ── Detected app diagnostics ──────────────────────────────────────
+        ttk.Separator(frm, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Label(frm, text="Detected App Details:", font=FONT_SM).pack(anchor="w", pady=(0, 2))
+        diag = tk.Text(frm, height=4, wrap="word", relief="solid", borderwidth=1)
+        diag.pack(fill="x")
+        diag_lines = []
+        for _dlbl, _dexe in detected:
+            if _dexe:
+                diag_lines.append(f"  {_dlbl}: {_dexe}")
+            else:
+                diag_lines.append(f"  {_dlbl}: (built-in, no path)")
+        if not diag_lines:
+            diag_lines = ["  No dictation apps found. Try Rescan."]
+        diag.insert("1.0", "\n".join(diag_lines))
+        diag.configure(state="disabled")
 
         btns = ttk.Frame(frm)
         btns.pack(fill="x", pady=(8, 0))
@@ -2765,6 +2806,8 @@ class SessionDialog(tk.Toplevel):
             self._btn_start_dict.configure(state="normal")
             self._btn_stop_dict.configure(state="disabled")
             self._set_dictation_idle_status()
+            if getattr(self, "_auto_paste_after_dictation", None) and self._auto_paste_after_dictation.get():
+                self.after(600, self._paste_dictation_from_clipboard)
             return
 
         self._set_dictation_idle_status()
