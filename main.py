@@ -955,6 +955,11 @@ def lframe(parent, text, **kw):
     return f
 
 
+def _sc(n: int) -> int:
+    """Scale a pixel column-width value by the current display DPI factor."""
+    return max(1, int(n * UI_SCALE))
+
+
 def btn(parent, text, cmd, style="TButton", **kw):
     return ttk.Button(parent, text=text, command=cmd, style=style, **kw)
 
@@ -1043,7 +1048,7 @@ class UserDirectoryDialog(tk.Toplevel):
             ("active", "Active", 76),
         ]:
             self.tv.heading(c, text=h, anchor="w")
-            self.tv.column(c, width=w, stretch=c in ("name", "email"))
+            self.tv.column(c, width=_sc(w), stretch=c in ("name", "email"))
 
         vsb = ttk.Scrollbar(left, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=vsb.set)
@@ -1571,9 +1576,9 @@ class DSMPicker(tk.Toplevel):
         self.tv.heading("code",        text="Code",       anchor="w")
         self.tv.heading("description", text="Description",anchor="w")
         self.tv.heading("category",    text="Category",   anchor="w")
-        self.tv.column("code",        width=150, minwidth=130, stretch=False)
-        self.tv.column("description", width=560, minwidth=320, stretch=True)
-        self.tv.column("category",    width=260, minwidth=210, stretch=False)
+        self.tv.column("code",        width=_sc(150), minwidth=_sc(130), stretch=False)
+        self.tv.column("description", width=_sc(560), minwidth=_sc(320), stretch=True)
+        self.tv.column("category",    width=_sc(260), minwidth=_sc(210), stretch=False)
         sb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=sb.set)
         self.tv.pack(side="left", fill="both", expand=True)
@@ -3088,7 +3093,7 @@ class PatientsTab(ttk.Frame):
             ("Phone",126),("Insurance",190),("Dx1",110),("Status",92)]
         for (hdr, w), col in zip(hdrs, cols):
             self.tv.heading(col, text=hdr, anchor="w")
-            self.tv.column(col, width=w, stretch=col in ("last_name","first_name","insurance"))
+            self.tv.column(col, width=_sc(w), stretch=col in ("last_name","first_name","insurance"))
 
         vsb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=vsb.set)
@@ -3241,7 +3246,7 @@ class SessionNotesTab(ttk.Frame):
         hdrs = [("ID",48),("Patient",220),("Date",96),("Type",132),("CPT",78),("Fee",90),("Signed",76)]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
-            self.tv.column(c, width=w, stretch=c in ("patient_name",))
+            self.tv.column(c, width=_sc(w), stretch=c in ("patient_name",))
         vsb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=vsb.set)
         self.tv.pack(side="left", fill="both", expand=True)
@@ -3688,7 +3693,7 @@ class BillingTab(ttk.Frame):
         ]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
-            self.tv.column(c, width=w, stretch=c in ("patient_name", "description"))
+            self.tv.column(c, width=_sc(w), stretch=c in ("patient_name", "description"))
         vsb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=vsb.set)
         self.tv.pack(side="left", fill="both", expand=True)
@@ -6127,7 +6132,7 @@ class AppointmentBookTab(ttk.Frame):
             ("Type", 126), ("Min", 56), ("Status", 110), ("Phone", 126), ("Notes", 260)]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
-            self.tv.column(c, width=w, stretch=(c == "notes"))
+            self.tv.column(c, width=_sc(w), stretch=(c == "notes"))
         vsb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=vsb.set)
         self.tv.pack(side="left", fill="both", expand=True)
@@ -6330,7 +6335,7 @@ class BookkeepingTab(ttk.Frame):
             # Payee stretches to fill spare space; all other columns are fixed.
             _stretch = (col == "payee")
             self.tv.heading(col, text=hdr, anchor="w")
-            self.tv.column(col, width=w, minwidth=max(50, int(w * 0.75)), stretch=_stretch, anchor=anc)
+            self.tv.column(col, width=_sc(w), minwidth=max(50, int(_sc(w) * 0.75)), stretch=_stretch, anchor=anc)
 
         vsb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self._hsb = ttk.Scrollbar(frm, orient="horizontal", command=self._on_xscroll)
@@ -6625,8 +6630,8 @@ class BookkeepingTab(ttk.Frame):
         tv2 = ttk.Treeview(frm, columns=cols, show="headings")
         for col, hdr in zip(cols, hdrs):
             tv2.heading(col, text=hdr, anchor="w")
-            tv2.column(col, width=98, anchor="e" if col != "month" else "w", stretch=False)
-        tv2.column("month", width=118)
+            tv2.column(col, width=_sc(98), anchor="e" if col != "month" else "w", stretch=False)
+        tv2.column("month", width=_sc(118))
 
         hsb2 = ttk.Scrollbar(frm, orient="horizontal", command=tv2.xview)
         tv2.configure(xscrollcommand=hsb2.set)
@@ -6725,15 +6730,15 @@ class BookkeepingTab(ttk.Frame):
         tv_in = ttk.Treeview(left, columns=cols, show="headings", selectmode="none")
         tv_in.heading("category", text="Category", anchor="w")
         tv_in.heading("amount", text="Amount", anchor="e")
-        tv_in.column("category", width=250, anchor="w", stretch=True)
-        tv_in.column("amount", width=126, anchor="e", stretch=False)
+        tv_in.column("category", width=_sc(250), anchor="w", stretch=True)
+        tv_in.column("amount", width=_sc(126), anchor="e", stretch=False)
         tv_in.grid(row=0, column=0, sticky="nsew")
 
         tv_exp = ttk.Treeview(right, columns=cols, show="headings", selectmode="none")
         tv_exp.heading("category", text="Category", anchor="w")
         tv_exp.heading("amount", text="Amount", anchor="e")
-        tv_exp.column("category", width=250, anchor="w", stretch=True)
-        tv_exp.column("amount", width=126, anchor="e", stretch=False)
+        tv_exp.column("category", width=_sc(250), anchor="w", stretch=True)
+        tv_exp.column("amount", width=_sc(126), anchor="e", stretch=False)
         tv_exp.grid(row=0, column=0, sticky="nsew")
 
         sb_in = ttk.Scrollbar(left, orient="vertical", command=tv_in.yview)
