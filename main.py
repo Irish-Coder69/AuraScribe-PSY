@@ -921,9 +921,9 @@ def ttk_style():
     except Exception:
         pass
     _fs = FONT_UI[1]  # honours adaptive size set by TheraTrakApp.__init__
-    _btn_pad = 2 if UI_DENSE_MODE else 4
-    _entry_pad = 2 if UI_DENSE_MODE else 3
-    _tab_pad = [8, 4] if UI_DENSE_MODE else [10, 5]
+    _btn_pad = 4 if UI_DENSE_MODE else 6
+    _entry_pad = 4 if UI_DENSE_MODE else 5
+    _tab_pad = [10, 5] if UI_DENSE_MODE else [12, 6]
     style.master.option_add("*Font",       ("Arial", _fs))
     style.master.option_add("*Text.Font",  ("Arial", _fs))
     style.master.option_add("*Entry.Font", ("Arial", _fs))
@@ -942,9 +942,9 @@ def ttk_style():
     # high-DPI laptop displays.
     _font_metrics = tkFont.Font(root=style.master, font=FONT_UI).metrics()
     _line_h = int(_font_metrics.get("linespace", 16))
-    _row_h = max(22 if UI_DENSE_MODE else 24, _line_h + (6 if UI_DENSE_MODE else 8))
+    _row_h = max(26 if UI_DENSE_MODE else 28, _line_h + (10 if UI_DENSE_MODE else 12))
     style.configure("Treeview", font=FONT_UI, rowheight=_row_h, background=ROW_ODD, fieldbackground=ROW_ODD)
-    style.configure("Treeview.Heading", font=("Arial", _fs, "bold"), background=HDR_BG, foreground="white")
+    style.configure("Treeview.Heading", font=("Arial", _fs, "bold"), background=HDR_BG, foreground="white", padding=(8, 6))
     style.map("Treeview", background=[("selected", SEL_BG)], foreground=[("selected", "#1e3a5f")])
     return style
 
@@ -1034,13 +1034,13 @@ class UserDirectoryDialog(tk.Toplevel):
         cols = ("id", "username", "name", "role", "email", "phone", "active")
         self.tv = ttk.Treeview(left, columns=cols, show="headings", selectmode="browse")
         for c, h, w in [
-            ("id", "ID", 40),
-            ("username", "Username", 120),
-            ("name", "Name", 170),
-            ("role", "Role", 90),
-            ("email", "Email", 180),
-            ("phone", "Phone", 110),
-            ("active", "Active", 70),
+            ("id", "ID", 48),
+            ("username", "Username", 140),
+            ("name", "Name", 190),
+            ("role", "Role", 96),
+            ("email", "Email", 220),
+            ("phone", "Phone", 126),
+            ("active", "Active", 76),
         ]:
             self.tv.heading(c, text=h, anchor="w")
             self.tv.column(c, width=w, stretch=c in ("name", "email"))
@@ -1094,8 +1094,10 @@ class UserDirectoryDialog(tk.Toplevel):
             ttk.Label(form, text=lbl3).grid(row=r, column=4, sticky="e", padx=(4, 2), pady=3)
             ttk.Entry(form, textvariable=fv(n3)).grid(row=r, column=5, sticky="ew", padx=(0, 8), pady=3)
 
+        for c in (0, 2, 4):
+            form.columnconfigure(c, weight=0, minsize=112)
         for c in (1, 3, 5):
-            form.columnconfigure(c, weight=1)
+            form.columnconfigure(c, weight=1, minsize=132)
 
         # ── Read-only info row
         info_frm = ttk.Frame(form)
@@ -1256,11 +1258,11 @@ class CreateAccountDialog(tk.Toplevel):
         canvas.bind("<Configure>", _sync_scroll)
         _bind_mousewheel_recursive(frm, canvas.yview_scroll)
 
-        frm.columnconfigure(0, weight=0, minsize=130)
-        frm.columnconfigure(1, weight=0, minsize=200)
-        frm.columnconfigure(2, weight=0, minsize=40)  # spacer
-        frm.columnconfigure(3, weight=0, minsize=160)
-        frm.columnconfigure(4, weight=0, minsize=200)
+        frm.columnconfigure(0, weight=0, minsize=132)
+        frm.columnconfigure(1, weight=1, minsize=230)
+        frm.columnconfigure(2, weight=0, minsize=28)  # spacer
+        frm.columnconfigure(3, weight=0, minsize=148)
+        frm.columnconfigure(4, weight=1, minsize=230)
 
         # ── Title ────────────────────────────────────────────────
         ttk.Label(frm, text="Create User Account", font=FONT_H1).grid(
@@ -1269,26 +1271,26 @@ class CreateAccountDialog(tk.Toplevel):
         # ── Row 1: First Name | Username ─────────────────────────
         ttk.Label(frm, text="First Name*").grid(row=1, column=0, sticky="e", padx=4, pady=4)
         _e_first = ttk.Entry(frm, textvariable=self._field("first_name"), width=24)
-        _e_first.grid(row=1, column=1, sticky="w")
+        _e_first.grid(row=1, column=1, sticky="ew")
         ttk.Label(frm, text="Username*").grid(row=1, column=3, sticky="e", padx=4, pady=4)
         _e_username = ttk.Entry(frm, textvariable=self._field("username"), width=24)
-        _e_username.grid(row=1, column=4, sticky="w")
+        _e_username.grid(row=1, column=4, sticky="ew")
 
         # ── Row 2: Middle Name | Password ────────────────────────
         ttk.Label(frm, text="Middle Name").grid(row=2, column=0, sticky="e", padx=4, pady=4)
         _e_middle = ttk.Entry(frm, textvariable=self._field("middle_name"), width=24)
-        _e_middle.grid(row=2, column=1, sticky="w")
+        _e_middle.grid(row=2, column=1, sticky="ew")
         ttk.Label(frm, text="Password*").grid(row=2, column=3, sticky="e", padx=4, pady=4)
         _e_password = ttk.Entry(frm, textvariable=self._field("password"), show="*", width=24)
-        _e_password.grid(row=2, column=4, sticky="w")
+        _e_password.grid(row=2, column=4, sticky="ew")
 
         # ── Row 3: Last Name | Confirm Password ──────────────────
         ttk.Label(frm, text="Last Name*").grid(row=3, column=0, sticky="e", padx=4, pady=4)
         _e_last = ttk.Entry(frm, textvariable=self._field("last_name"), width=24)
-        _e_last.grid(row=3, column=1, sticky="w")
+        _e_last.grid(row=3, column=1, sticky="ew")
         ttk.Label(frm, text="Confirm Password*").grid(row=3, column=3, sticky="e", padx=4, pady=4)
         _e_confirm = ttk.Entry(frm, textvariable=self._field("confirm_password"), show="*", width=24)
-        _e_confirm.grid(row=3, column=4, sticky="w")
+        _e_confirm.grid(row=3, column=4, sticky="ew")
 
         # ── Row 4: Show Password toggle ───────────────────────────
         _show_pw_var = tk.BooleanVar(value=False)
@@ -1304,17 +1306,17 @@ class CreateAccountDialog(tk.Toplevel):
         # ── Row 5: Phone | Role ───────────────────────────────────
         ttk.Label(frm, text="Phone").grid(row=5, column=0, sticky="e", padx=4, pady=4)
         _e_phone = ttk.Entry(frm, textvariable=self._field("phone"), width=24)
-        _e_phone.grid(row=5, column=1, sticky="w")
+        _e_phone.grid(row=5, column=1, sticky="ew")
         ttk.Label(frm, text="Role").grid(row=5, column=3, sticky="e", padx=4, pady=4)
         _cb_role = ttk.Combobox(frm, textvariable=self._field("role", "User"),
                      values=["Admin", "User", "Billing", "ReadOnly"],
                      width=21, state="readonly")
-        _cb_role.grid(row=5, column=4, sticky="w")
+        _cb_role.grid(row=5, column=4, sticky="ew")
 
         # ── Row 6: Email | (empty right) ─────────────────────────
         ttk.Label(frm, text="Email").grid(row=6, column=0, sticky="e", padx=4, pady=4)
         _e_email = ttk.Entry(frm, textvariable=self._field("email"), width=24)
-        _e_email.grid(row=6, column=1, sticky="w")
+        _e_email.grid(row=6, column=1, sticky="ew")
 
         # ── Mailing Address header ────────────────────────────────
         ttk.Separator(frm, orient="horizontal").grid(row=7, column=0, columnspan=2, sticky="ew", pady=(10, 2))
@@ -1332,48 +1334,48 @@ class CreateAccountDialog(tk.Toplevel):
         # ── Mailing | Billing fields ──────────────────────────────
         ttk.Label(frm, text="Address").grid(row=9, column=0, sticky="e", padx=4, pady=4)
         _e_address = ttk.Entry(frm, textvariable=self._field("address"), width=28)
-        _e_address.grid(row=9, column=1, sticky="w")
+        _e_address.grid(row=9, column=1, sticky="ew")
 
         ttk.Label(frm, text="Billing Address").grid(row=10, column=3, sticky="e", padx=4, pady=4)
         _ba = ttk.Entry(frm, textvariable=self._field("billing_address"), width=24)
-        _ba.grid(row=10, column=4, sticky="w")
+        _ba.grid(row=10, column=4, sticky="ew")
         self._billing_widgets["billing_address"] = _ba
 
         ttk.Label(frm, text="City").grid(row=10, column=0, sticky="e", padx=4, pady=4)
         _e_city = ttk.Entry(frm, textvariable=self._field("city"), width=24)
-        _e_city.grid(row=10, column=1, sticky="w")
+        _e_city.grid(row=10, column=1, sticky="ew")
 
         ttk.Label(frm, text="Billing City").grid(row=11, column=3, sticky="e", padx=4, pady=4)
         _bc = ttk.Entry(frm, textvariable=self._field("billing_city"), width=24)
-        _bc.grid(row=11, column=4, sticky="w")
+        _bc.grid(row=11, column=4, sticky="ew")
         self._billing_widgets["billing_city"] = _bc
 
         ttk.Label(frm, text="State").grid(row=11, column=0, sticky="e", padx=4, pady=4)
         _cb_state = ttk.Combobox(frm, textvariable=self._field("state"), values=STATES, width=8, state="readonly")
-        _cb_state.grid(row=11, column=1, sticky="w")
+        _cb_state.grid(row=11, column=1, sticky="ew")
 
         ttk.Label(frm, text="Billing State").grid(row=12, column=3, sticky="e", padx=4, pady=4)
         _bs = ttk.Combobox(frm, textvariable=self._field("billing_state"), values=STATES, width=8, state="readonly")
-        _bs.grid(row=12, column=4, sticky="w")
+        _bs.grid(row=12, column=4, sticky="ew")
         self._billing_widgets["billing_state"] = _bs
 
         ttk.Label(frm, text="Zip").grid(row=12, column=0, sticky="e", padx=4, pady=4)
         _e_zip = ttk.Entry(frm, textvariable=self._field("zip"), width=12)
-        _e_zip.grid(row=12, column=1, sticky="w")
+        _e_zip.grid(row=12, column=1, sticky="ew")
 
         ttk.Label(frm, text="Billing Zip").grid(row=13, column=3, sticky="e", padx=4, pady=4)
         _bz = ttk.Entry(frm, textvariable=self._field("billing_zip"), width=12)
-        _bz.grid(row=13, column=4, sticky="w")
+        _bz.grid(row=13, column=4, sticky="ew")
         self._billing_widgets["billing_zip"] = _bz
 
         # ── Taxonomy / NPI ───────────────────────────────────────
         ttk.Label(frm, text="Taxonomy Codes*").grid(row=13, column=0, sticky="e", padx=4, pady=4)
         _e_license = ttk.Entry(frm, textvariable=self._field("license_number"), width=24)
-        _e_license.grid(row=13, column=1, sticky="w")
+        _e_license.grid(row=13, column=1, sticky="ew")
 
         ttk.Label(frm, text="NPI Number*").grid(row=14, column=0, sticky="e", padx=4, pady=4)
         _e_npi = ttk.Entry(frm, textvariable=self._field("npi_number"), width=24)
-        _e_npi.grid(row=14, column=1, sticky="w")
+        _e_npi.grid(row=14, column=1, sticky="ew")
 
         # ── Tab order: left column top→bottom, then right column ──
         self._set_tab_order([
@@ -1555,11 +1557,12 @@ class DSMPicker(tk.Toplevel):
     def _build(self):
         top = ttk.Frame(self, padding=8)
         top.pack(fill="x")
-        ttk.Label(top, text="Search:").pack(side="left")
+        top.columnconfigure(1, weight=1)
+        ttk.Label(top, text="Search:").grid(row=0, column=0, sticky="w")
         self.sv = tk.StringVar()
         self.sv.trace_add("write", lambda *a: self._search())
         self.search_entry = ttk.Entry(top, textvariable=self.sv, width=40)
-        self.search_entry.pack(side="left", padx=6)
+        self.search_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
         frm = ttk.Frame(self, padding=8)
         frm.pack(fill="both", expand=True)
@@ -1568,9 +1571,9 @@ class DSMPicker(tk.Toplevel):
         self.tv.heading("code",        text="Code",       anchor="w")
         self.tv.heading("description", text="Description",anchor="w")
         self.tv.heading("category",    text="Category",   anchor="w")
-        self.tv.column("code",        width=130, minwidth=110, stretch=False)
-        self.tv.column("description", width=400, stretch=True)
-        self.tv.column("category",    width=220, minwidth=180, stretch=False)
+        self.tv.column("code",        width=150, minwidth=130, stretch=False)
+        self.tv.column("description", width=560, minwidth=320, stretch=True)
+        self.tv.column("category",    width=260, minwidth=210, stretch=False)
         sb = ttk.Scrollbar(frm, orient="vertical", command=self.tv.yview)
         self.tv.configure(yscrollcommand=sb.set)
         self.tv.pack(side="left", fill="both", expand=True)
@@ -1580,8 +1583,8 @@ class DSMPicker(tk.Toplevel):
 
         bot = ttk.Frame(self, padding=8)
         bot.pack(fill="x")
-        btn(bot, "Select", self._select, "Accent.TButton").pack(side="left", padx=4)
-        btn(bot, "Cancel", self.destroy).pack(side="left")
+        btn(bot, "Select", self._select, "Accent.TButton").pack(side="right", padx=4)
+        btn(bot, "Cancel", self.destroy).pack(side="right")
 
         self._load_all()
         self.after(0, self.search_entry.focus_set)
@@ -1662,7 +1665,10 @@ class PatientDialog(tk.Toplevel):
         # ── Demographics tab ──────────────────────────────────────────────────
         f1 = ttk.Frame(nb, padding=10)
         nb.add(f1, text=" Demographics ")
-        for c in range(6): f1.columnconfigure(c, weight=1)
+        for c in (0, 2, 4):
+            f1.columnconfigure(c, weight=0, minsize=110)
+        for c in (1, 3, 5):
+            f1.columnconfigure(c, weight=1, minsize=120)
 
         ttk.Label(f1, text="Last Name*").grid(row=0, column=0, sticky="e", padx=4, pady=3)
         ttk.Entry(f1, textvariable=self._fld("last_name"), width=22).grid(row=0, column=1, sticky="ew", padx=(0,8))
@@ -1741,11 +1747,17 @@ class PatientDialog(tk.Toplevel):
         # ── Insurance tab ─────────────────────────────────────────────────────
         f2 = ttk.Frame(nb, padding=10)
         nb.add(f2, text=" Insurance ")
-        for c in range(6): f2.columnconfigure(c, weight=1)
+        for c in (0, 2, 4):
+            f2.columnconfigure(c, weight=0, minsize=110)
+        for c in (1, 3, 5):
+            f2.columnconfigure(c, weight=1, minsize=120)
 
         pri = lframe(f2, "Primary Insurance")
         pri.grid(row=0, column=0, columnspan=6, sticky="ew", pady=4)
-        for c in range(6): pri.columnconfigure(c, weight=1)
+        for c in (0, 2, 4):
+            pri.columnconfigure(c, weight=0, minsize=110)
+        for c in (1, 3, 5):
+            pri.columnconfigure(c, weight=1, minsize=120)
 
         ins_fields = [
             ("Insurance Name", "ins_name", 0), ("Plan Name", "ins_plan", 1),
@@ -1775,7 +1787,10 @@ class PatientDialog(tk.Toplevel):
 
         sec = lframe(f2, "Secondary Insurance")
         sec.grid(row=1, column=0, columnspan=6, sticky="ew", pady=4)
-        for c in range(6): sec.columnconfigure(c, weight=1)
+        for c in (0, 2, 4):
+            sec.columnconfigure(c, weight=0, minsize=110)
+        for c in (1, 3, 5):
+            sec.columnconfigure(c, weight=1, minsize=120)
         sec_fields = [
             ("Insurance Name", "ins2_name", 0), ("Plan Name", "ins2_plan", 1),
             ("Member/Policy ID", "ins2_id", 2), ("Group Number", "ins2_group", 3),
@@ -1894,7 +1909,13 @@ class SessionDialog(tk.Toplevel):
     def _build(self):
         top = ttk.Frame(self, padding=10)
         top.pack(fill="x")
-        for c in range(8): top.columnconfigure(c, weight=1)
+        for c in (0, 2, 4):
+            top.columnconfigure(c, weight=0, minsize=112)
+        top.columnconfigure(1, weight=1, minsize=150)
+        top.columnconfigure(3, weight=1, minsize=130)
+        top.columnconfigure(5, weight=1, minsize=150)
+        top.columnconfigure(6, weight=0, minsize=124)
+        top.columnconfigure(7, weight=1, minsize=124)
 
         # Patient selector
         ttk.Label(top, text="Patient*").grid(row=0, column=0, sticky="e", padx=4, pady=3)
@@ -1916,30 +1937,30 @@ class SessionDialog(tk.Toplevel):
                 foreground="white",
                 borderwidth=2,
             )
-            self._date_entry.grid(row=0, column=4, sticky="w")
+            self._date_entry.grid(row=0, column=4, sticky="ew")
         else:
-            ttk.Entry(top, textvariable=self._vars["session_date"], width=12).grid(row=0, column=4, sticky="w")
+            ttk.Entry(top, textvariable=self._vars["session_date"], width=12).grid(row=0, column=4, sticky="ew")
             ttk.Label(top, text="(YYYY-MM-DD)").grid(row=0, column=5, sticky="w")
 
         ttk.Label(top, text="Duration (min)").grid(row=1, column=0, sticky="e", padx=4, pady=3)
-        ttk.Entry(top, textvariable=self._fld("duration", "50"), width=6).grid(row=1, column=1, sticky="w")
+        ttk.Entry(top, textvariable=self._fld("duration", "50"), width=6).grid(row=1, column=1, sticky="ew")
 
         ttk.Label(top, text="Session Type").grid(row=1, column=2, sticky="e", padx=4)
         ttk.Combobox(top, textvariable=self._fld("session_type", "Individual"),
-                     values=SESSION_TYPES, width=18, state="readonly").grid(row=1, column=3, sticky="w")
+                 values=SESSION_TYPES, width=18, state="readonly").grid(row=1, column=3, sticky="ew")
 
         ttk.Label(top, text="Place of Service").grid(row=1, column=4, sticky="e", padx=4)
         pos_cb = ttk.Combobox(top, textvariable=self._fld("place_of_service", "11"),
                                values=[p[0] for p in PLACE_CODES], width=20)
-        pos_cb.grid(row=1, column=5, sticky="w")
+        pos_cb.grid(row=1, column=5, sticky="ew")
 
         ttk.Label(top, text="CPT Code").grid(row=2, column=0, sticky="e", padx=4, pady=3)
         ttk.Combobox(top, textvariable=self._fld("cpt_code", "90834"),
-                     values=CPT_CODES, width=10).grid(row=2, column=1, sticky="w")
+                     values=CPT_CODES, width=10).grid(row=2, column=1, sticky="ew")
         ttk.Label(top, text="Modifier").grid(row=2, column=2, sticky="e", padx=4)
-        ttk.Entry(top, textvariable=self._fld("cpt_modifier"), width=6).grid(row=2, column=3, sticky="w")
+        ttk.Entry(top, textvariable=self._fld("cpt_modifier"), width=6).grid(row=2, column=3, sticky="ew")
         ttk.Label(top, text="Fee ($)").grid(row=2, column=4, sticky="e", padx=4)
-        ttk.Entry(top, textvariable=self._fld("fee", "0.00"), width=10).grid(row=2, column=5, sticky="w")
+        ttk.Entry(top, textvariable=self._fld("fee", "0.00"), width=10).grid(row=2, column=5, sticky="ew")
         btn(top, "Dictation Settings", self._open_dictation_settings).grid(row=2, column=6, columnspan=2, sticky="e", padx=4)
 
         # Diagnoses row
@@ -2815,7 +2836,10 @@ class BillingDialog(tk.Toplevel):
     def _build(self):
         f = ttk.Frame(self, padding=14)
         f.pack(fill="both", expand=True)
-        for c in range(4): f.columnconfigure(c, weight=1)
+        for c in (0, 2):
+            f.columnconfigure(c, weight=0, minsize=118)
+        for c in (1, 3):
+            f.columnconfigure(c, weight=1, minsize=150)
 
         # Patient
         ttk.Label(f, text="Patient*").grid(row=0, column=0, sticky="e", padx=4, pady=4)
@@ -2831,39 +2855,39 @@ class BillingDialog(tk.Toplevel):
         self._fld("record_date")
         if _HAS_CALENDAR:
             _DateEntry(f, textvariable=self._vars["record_date"], width=12,
-                       date_pattern="MM/dd/yyyy").grid(row=1, column=1, sticky="w")
+                       date_pattern="MM/dd/yyyy").grid(row=1, column=1, sticky="ew")
         else:
-            ttk.Entry(f, textvariable=self._vars["record_date"], width=14).grid(row=1, column=1, sticky="w")
+            ttk.Entry(f, textvariable=self._vars["record_date"], width=14).grid(row=1, column=1, sticky="ew")
         ttk.Label(f, text="Service Date").grid(row=1, column=2, sticky="e", padx=4)
         self._fld("service_date")
         if _HAS_CALENDAR:
             _DateEntry(f, textvariable=self._vars["service_date"], width=12,
-                       date_pattern="MM/dd/yyyy").grid(row=1, column=3, sticky="w")
+                       date_pattern="MM/dd/yyyy").grid(row=1, column=3, sticky="ew")
         else:
-            ttk.Entry(f, textvariable=self._vars["service_date"], width=14).grid(row=1, column=3, sticky="w")
+            ttk.Entry(f, textvariable=self._vars["service_date"], width=14).grid(row=1, column=3, sticky="ew")
 
         ttk.Label(f, text="Description").grid(row=2, column=0, sticky="e", padx=4, pady=4)
         ttk.Entry(f, textvariable=self._fld("description"), width=36).grid(row=2, column=1, columnspan=3, sticky="ew")
 
         ttk.Label(f, text="Charge ($)").grid(row=3, column=0, sticky="e", padx=4, pady=4)
-        ttk.Entry(f, textvariable=self._fld("charge", "0.00"), width=10).grid(row=3, column=1, sticky="w")
+        ttk.Entry(f, textvariable=self._fld("charge", "0.00"), width=10).grid(row=3, column=1, sticky="ew")
         ttk.Label(f, text="Pt. Payment ($)").grid(row=3, column=2, sticky="e", padx=4)
-        ttk.Entry(f, textvariable=self._fld("payment", "0.00"), width=10).grid(row=3, column=3, sticky="w")
+        ttk.Entry(f, textvariable=self._fld("payment", "0.00"), width=10).grid(row=3, column=3, sticky="ew")
 
         ttk.Label(f, text="Ins. Payment ($)").grid(row=4, column=0, sticky="e", padx=4, pady=4)
-        ttk.Entry(f, textvariable=self._fld("ins_payment", "0.00"), width=10).grid(row=4, column=1, sticky="w")
+        ttk.Entry(f, textvariable=self._fld("ins_payment", "0.00"), width=10).grid(row=4, column=1, sticky="ew")
         ttk.Label(f, text="Adjustment ($)").grid(row=4, column=2, sticky="e", padx=4)
-        ttk.Entry(f, textvariable=self._fld("adjustment", "0.00"), width=10).grid(row=4, column=3, sticky="w")
+        ttk.Entry(f, textvariable=self._fld("adjustment", "0.00"), width=10).grid(row=4, column=3, sticky="ew")
 
         ttk.Label(f, text="Payment Type").grid(row=5, column=0, sticky="e", padx=4, pady=4)
         ttk.Combobox(f, textvariable=self._fld("payment_type"),
                      values=["","Cash","Check","Credit Card","Debit Card","PayPal","Venmo","Insurance","Write-off","Other"],
-                     width=16).grid(row=5, column=1, sticky="w")
+                 width=16).grid(row=5, column=1, sticky="ew")
         ttk.Label(f, text="Check #").grid(row=5, column=2, sticky="e", padx=4)
-        ttk.Entry(f, textvariable=self._fld("check_number"), width=12).grid(row=5, column=3, sticky="w")
+        ttk.Entry(f, textvariable=self._fld("check_number"), width=12).grid(row=5, column=3, sticky="ew")
 
         ttk.Label(f, text="Claim #").grid(row=6, column=0, sticky="e", padx=4, pady=4)
-        ttk.Entry(f, textvariable=self._fld("claim_number"), width=20).grid(row=6, column=1, sticky="w")
+        ttk.Entry(f, textvariable=self._fld("claim_number"), width=20).grid(row=6, column=1, sticky="ew")
 
         ttk.Label(f, text="Unbilled Session").grid(row=7, column=0, sticky="e", padx=4, pady=4)
         self.sess_var = tk.StringVar()
@@ -3060,8 +3084,8 @@ class PatientsTab(ttk.Frame):
 
         cols = ("id","last_name","first_name","dob","phone_home","insurance","dx1","status")
         self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="browse")
-        hdrs = [("ID",40),("Last Name",130),("First Name",110),("DOB",90),
-                ("Phone",110),("Insurance",160),("Dx1",90),("Status",80)]
+        hdrs = [("ID",48),("Last Name",150),("First Name",136),("DOB",96),
+            ("Phone",126),("Insurance",190),("Dx1",110),("Status",92)]
         for (hdr, w), col in zip(hdrs, cols):
             self.tv.heading(col, text=hdr, anchor="w")
             self.tv.column(col, width=w, stretch=col in ("last_name","first_name","insurance"))
@@ -3214,7 +3238,7 @@ class SessionNotesTab(ttk.Frame):
 
         cols = ("id","patient_name","session_date","session_type","cpt_code","fee","signed")
         self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="extended")
-        hdrs = [("ID",40),("Patient",180),("Date",90),("Type",120),("CPT",70),("Fee",80),("Signed",60)]
+        hdrs = [("ID",48),("Patient",220),("Date",96),("Type",132),("CPT",78),("Fee",90),("Signed",76)]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
             self.tv.column(c, width=w, stretch=c in ("patient_name",))
@@ -3658,9 +3682,9 @@ class BillingTab(ttk.Frame):
         )
         self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="extended")
         hdrs = [
-            ("ID", 40), ("Patient", 160), ("Date", 90), ("Description", 160),
-            ("Charge", 80), ("Pt Paid", 75), ("Ins Paid", 75), ("Adj", 70),
-            ("Balance", 80), ("Method", 100),
+            ("ID", 48), ("Patient", 180), ("Date", 96), ("Description", 210),
+            ("Charge", 88), ("Pt Paid", 84), ("Ins Paid", 84), ("Adj", 78),
+            ("Balance", 92), ("Method", 112),
         ]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
@@ -6099,8 +6123,8 @@ class AppointmentBookTab(ttk.Frame):
         frm.pack(fill="both", expand=True, padx=8, pady=(0, 4))
         cols = ("id", "date", "time", "patient", "type", "duration", "status", "phone", "notes")
         self.tv = ttk.Treeview(frm, columns=cols, show="headings", selectmode="browse")
-        hdrs = [("ID", 40), ("Date", 90), ("Time", 80), ("Patient", 180),
-                ("Type", 110), ("Min", 45), ("Status", 100), ("Phone", 110), ("Notes", 220)]
+        hdrs = [("ID", 48), ("Date", 96), ("Time", 84), ("Patient", 210),
+            ("Type", 126), ("Min", 56), ("Status", 110), ("Phone", 126), ("Notes", 260)]
         for (h, w), c in zip(hdrs, cols):
             self.tv.heading(c, text=h, anchor="w")
             self.tv.column(c, width=w, stretch=(c == "notes"))
@@ -6296,11 +6320,11 @@ class BookkeepingTab(ttk.Frame):
         self.tv = ttk.Treeview(frm, columns=self._cols, show="headings", selectmode="browse")
 
         col_defs = (
-            [("Date", 82, "w"), ("Ck #", 58, "w"), ("Payee / Description", 200, "w"),
-             ("Memo", 140, "w"), ("Tax", 46, "center")] +
-            [(lbl, 90, "e") for _, lbl in _BK_INC_COLS] +
-            [(lbl, 84, "e") for _, lbl in _BK_EXP_COLS] +
-            [("Balance", 96, "e")]
+            [("Date", 90, "w"), ("Ck #", 64, "w"), ("Payee / Description", 240, "w"),
+             ("Memo", 176, "w"), ("Tax", 56, "center")] +
+            [(lbl, 98, "e") for _, lbl in _BK_INC_COLS] +
+            [(lbl, 92, "e") for _, lbl in _BK_EXP_COLS] +
+            [("Balance", 108, "e")]
         )
         for (hdr, w, anc), col in zip(col_defs, self._cols):
             # Payee stretches to fill spare space; all other columns are fixed.
@@ -6601,8 +6625,8 @@ class BookkeepingTab(ttk.Frame):
         tv2 = ttk.Treeview(frm, columns=cols, show="headings")
         for col, hdr in zip(cols, hdrs):
             tv2.heading(col, text=hdr, anchor="w")
-            tv2.column(col, width=90, anchor="e" if col != "month" else "w", stretch=False)
-        tv2.column("month", width=100)
+            tv2.column(col, width=98, anchor="e" if col != "month" else "w", stretch=False)
+        tv2.column("month", width=118)
 
         hsb2 = ttk.Scrollbar(frm, orient="horizontal", command=tv2.xview)
         tv2.configure(xscrollcommand=hsb2.set)
@@ -6701,15 +6725,15 @@ class BookkeepingTab(ttk.Frame):
         tv_in = ttk.Treeview(left, columns=cols, show="headings", selectmode="none")
         tv_in.heading("category", text="Category", anchor="w")
         tv_in.heading("amount", text="Amount", anchor="e")
-        tv_in.column("category", width=220, anchor="w", stretch=True)
-        tv_in.column("amount", width=120, anchor="e", stretch=False)
+        tv_in.column("category", width=250, anchor="w", stretch=True)
+        tv_in.column("amount", width=126, anchor="e", stretch=False)
         tv_in.grid(row=0, column=0, sticky="nsew")
 
         tv_exp = ttk.Treeview(right, columns=cols, show="headings", selectmode="none")
         tv_exp.heading("category", text="Category", anchor="w")
         tv_exp.heading("amount", text="Amount", anchor="e")
-        tv_exp.column("category", width=220, anchor="w", stretch=True)
-        tv_exp.column("amount", width=120, anchor="e", stretch=False)
+        tv_exp.column("category", width=250, anchor="w", stretch=True)
+        tv_exp.column("amount", width=126, anchor="e", stretch=False)
         tv_exp.grid(row=0, column=0, sticky="nsew")
 
         sb_in = ttk.Scrollbar(left, orient="vertical", command=tv_in.yview)
@@ -6905,7 +6929,7 @@ class TheraTrakApp(tk.Tk):
         # (physical ÷ DPI-scale) so all density decisions are DPI-independent.
         _log_w = int(SCREEN_FIT_W / UI_MAX_SCALE) if UI_MAX_SCALE > 1.05 else SCREEN_FIT_W
         _log_h = int(SCREEN_FIT_H / UI_MAX_SCALE) if UI_MAX_SCALE > 1.05 else SCREEN_FIT_H
-        UI_DENSE_MODE = (_log_w < 1600 or _log_h < 980)
+        UI_DENSE_MODE = (_log_w < 1366 or _log_h < 860)
         _append_startup_log(
             f"Display: {SCREEN_W}x{SCREEN_H}  DPI: {SCREEN_DPI}  "
             f"Scale: {UI_SCALE:.2f}x  Machine: {MACHINE_TYPE}"
@@ -6920,11 +6944,11 @@ class TheraTrakApp(tk.Tk):
         # thresholds behave the same on every display density.
         global FONT_UI, FONT_SM, FONT_LG, FONT_H1, FONT_MONO
         _fsize = 12
-        if _log_h < 720 or _log_w < 1050:
+        if _log_h < 700 or _log_w < 980:
             _fsize = 9
-        elif _log_h < 900 or _log_w < 1366:
+        elif _log_h < 820 or _log_w < 1180:
             _fsize = 10
-        elif _log_h < 1020 or _log_w < 1600:
+        elif _log_h < 940 or _log_w < 1440:
             _fsize = 11
         if _fsize != 12:
             FONT_UI   = ("Arial", _fsize)
