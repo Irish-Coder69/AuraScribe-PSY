@@ -2200,9 +2200,11 @@ class SessionDialog(tk.Toplevel):
             "Plan": self._plan,
         }
 
-        # Signed
-        bot = ttk.Frame(self, padding=8)
-        bot.pack(fill="x", side="bottom")
+        # Signed / dictation controls / actions
+        footer = ttk.Frame(self, padding=(8, 4, 8, 8))
+        footer.pack(fill="x", side="bottom")
+        bot = ttk.Frame(footer)
+        bot.pack(fill="x")
         self.signed_var = tk.IntVar()
         self.billing_var = tk.IntVar(value=1)
         ttk.Checkbutton(bot, text="Mark as Signed / Finalized",
@@ -2233,8 +2235,11 @@ class SessionDialog(tk.Toplevel):
         btn(bot, "Dictation Settings", self._open_dictation_settings).pack(side="left", padx=2)
         ttk.Label(bot, textvariable=self._dict_sv, foreground=MUTED).pack(side="left", padx=8)
         self._set_dictation_idle_status()
-        btn(bot, "Save Session", self._save, "Accent.TButton").pack(side="right", padx=6)
-        btn(bot, "Cancel", self.destroy).pack(side="right")
+
+        actions = ttk.Frame(footer)
+        actions.pack(fill="x", pady=(6, 0))
+        btn(actions, "Save Session", self._save, "Accent.TButton").pack(side="right", padx=6)
+        btn(actions, "Cancel", self.destroy).pack(side="right")
 
     def _find_vosk_model(self):
         if not VOSK_MODELS_DIR.exists():
