@@ -4645,7 +4645,8 @@ class CMS1500Tab(ttk.Frame):
             "claim_number": g(latest_billing, "claim_number"),
             "check_number": g(latest_billing, "check_number"),
             "prior_auth_number": g(latest_billing, "claim_number"),
-            "additional_claim_info": g(patient, "notes") or g(first, "note_text"),
+            # Box 19 must stay blank unless the user explicitly enters claim info.
+            "additional_claim_info": "",
             "total_charge": f"{total_charge:.2f}",
             "amount_paid": f"{total_paid:.2f}",
             "provider_signature": g(provider, "sig_on_file", "Signature On File"),
