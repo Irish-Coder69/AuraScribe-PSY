@@ -39,6 +39,20 @@ def _find_bundled_python_dll(app_bundle_dir: Path) -> Path | None:
     return None
 
 
+def _is_app_running() -> bool:
+    """Return True if TheraTrak Pro.exe has any running instances."""
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {APP_EXE}", "/NH", "/FO", "CSV"],
+            capture_output=True,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return APP_EXE.lower() in result.stdout.lower()
+    except OSError:
+        return False
+
+
 def _stop_running_app() -> None:
     # Best-effort stop so install can replace locked binaries.
     try:
@@ -51,6 +65,20 @@ def _stop_running_app() -> None:
         )
     except OSError:
         pass
+
+
+def _wait_for_app_exit(timeout: float = 10.0) -> bool:
+    """Wait up to *timeout* seconds for TheraTrak Pro to fully exit.
+
+    Returns True when the process is gone, False if it is still running
+    after the timeout.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _is_app_running():
+            return True
+        time.sleep(0.5)
+    return not _is_app_running()
 
 
 def _is_skippable_shutil_error(ex: shutil.Error) -> bool:
@@ -101,7 +129,7 @@ def _copy_with_retries(src: Path, dst: Path, attempts: int = 8) -> None:
             if attempt >= attempts:
                 raise
             _stop_running_app()
-            time.sleep(0.75)
+            time.sleep(1.5)
 
 
 def _copy_app_bundle_with_progress(
@@ -380,9 +408,100 @@ def main() -> int:
 
     source = bundled_dir()
     target = install_dir()
+
+    # If TheraTrak Pro is currently open, ask the user to let the installer
+    # close it.  Attempting to overwrite locked DLLs inside _internal/ causes
+    # WinError 32 (sharing violation) on the copy step.
+    if _is_app_running():
+        progress_window.destroy()
+        close_it = messagebox.askyesno(
+            APP_NAME,
+            "TheraTrak Pro is currently open.\n\n"
+            "It must be closed before the installer can update the files.\n"
+            "Click Yes to close it automatically and continue, or No to cancel.",
+            parent=root,
+        )
+        if not close_it:
+            messagebox.showinfo(APP_NAME, "Installation canceled.", parent=root)
+            root.destroy()
+            return 0
+        _stop_running_app()
+        # Recreate progress window
+        progress_window = Toplevel(root)
+        progress_window.title(f"Installing {APP_NAME}")
+        progress_window.resizable(False, False)
+        progress_window.attributes("-topmost", True)
+        progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
+        status_var2 = StringVar(value="Waiting for TheraTrak Pro to close...")
+        ttk.Label(progress_window, textvariable=status_var2, width=56).pack(padx=16, pady=(14, 8))
+        progress_var2 = DoubleVar(value=0)
+        progress_bar2 = ttk.Progressbar(
+            progress_window, orient="horizontal", mode="indeterminate", length=460
+        )
+        progress_bar2.pack(padx=16, pady=(0, 14))
+        progress_window.update_idletasks()
+        win_w2 = max(500, progress_window.winfo_reqwidth() + 8)
+        win_h2 = max(120, progress_window.winfo_reqheight() + 8)
+        progress_window.geometry(
+            f"{win_w2}x{win_h2}+{max(0,(screen_w-win_w2)//2)}+{max(0,(screen_h-win_h2)//2)}"
+        )
+        progress_window.deiconify()
+        progress_window.lift()
+        progress_window.update()
+        progress_bar2.start(10)
+        # Poll until process exits (up to 15 s), keeping the UI alive.
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline and _is_app_running():
+            progress_window.update()
+            time.sleep(0.25)
+        progress_bar2.stop()
+        progress_window.destroy()
+        if _is_app_running():
+            messagebox.showerror(
+                APP_NAME,
+                "TheraTrak Pro could not be closed automatically.\n"
+                "Please close it manually and run the installer again.",
+                parent=root,
+            )
+            root.destroy()
+            return 1
+        # Rebuild the real progress window now that the app is gone.
+        progress_window = Toplevel(root)
+        progress_window.title(f"Installing {APP_NAME}")
+        progress_window.resizable(False, False)
+        progress_window.attributes("-topmost", True)
+        progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
+        status_var = StringVar(value="Preparing installation folders...")
+        status_label = ttk.Label(progress_window, textvariable=status_var, width=56)
+        status_label.pack(padx=16, pady=(14, 8))
+        progress_var = DoubleVar(value=0)
+        progress_bar = ttk.Progressbar(
+            progress_window,
+            orient="horizontal",
+            mode="determinate",
+            length=460,
+            maximum=100,
+            variable=progress_var,
+        )
+        progress_bar.pack(padx=16, pady=(0, 14))
+        progress_window.update_idletasks()
+        win_w = max(500, progress_window.winfo_reqwidth() + 8)
+        win_h = max(120, progress_window.winfo_reqheight() + 8)
+        progress_window.geometry(
+            f"{win_w}x{win_h}+{max(0,(screen_w-win_w)//2)}+{max(0,(screen_h-win_h)//2)}"
+        )
+        progress_window.deiconify()
+        progress_window.lift()
+        progress_window.focus_force()
+        progress_window.update()
+
+        def set_progress(percent: float, status: str) -> None:  # type: ignore[no-redef]
+            progress_var.set(max(0, min(100, percent)))
+            status_var.set(status)
+            progress_window.update()
+
     set_progress(5, "Preparing installation folders...")
     target.mkdir(parents=True, exist_ok=True)
-    _stop_running_app()
 
     app_bundle = source / APP_BUNDLE_DIR
     set_progress(10, "Validating installer payload...")
