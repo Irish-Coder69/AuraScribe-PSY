@@ -4218,7 +4218,7 @@ class CMS1500Tab(ttk.Frame):
         self._last_preview_path = None
         self._paper_image = None
         self._paper_zoom_min = 1.2
-        self._paper_zoom_max = 2.8
+        self._paper_zoom_max = 10.0
         self._paper_zoom_step = 0.15
         self._paper_zoom = 2.0 if MACHINE_TYPE == "laptop" else 1.65
         self._paper_source_path = None
@@ -4488,11 +4488,11 @@ class CMS1500Tab(ttk.Frame):
         picker = tk.Toplevel(self)
         apply_window_icon(picker)
         picker.title("Select Patient for CMS-1500")
-        target_w = 920 if MACHINE_TYPE == "laptop" else 760
-        target_h = 640 if MACHINE_TYPE == "laptop" else 560
+        target_w = 1100 if MACHINE_TYPE == "laptop" else 760
+        target_h = 780 if MACHINE_TYPE == "laptop" else 560
         _w, _h = _screen_fit(target_w, target_h, pad=24)
         picker.geometry(f"{_w}x{_h}")
-        picker.minsize(680, 460)
+        picker.minsize(800, 560)
         picker.resizable(True, True)
         picker.grab_set()
 
