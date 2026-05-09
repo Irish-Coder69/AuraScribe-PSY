@@ -4214,6 +4214,11 @@ class CMS1500Tab(ttk.Frame):
         self._current_data = {}
         self._last_preview_path = None
         self._paper_image = None
+        self._paper_zoom_min = 1.2
+        self._paper_zoom_max = 2.8
+        self._paper_zoom_step = 0.15
+        self._paper_zoom = 2.0 if MACHINE_TYPE == "laptop" else 1.65
+        self._paper_source_path = None
         self._duplex_prefs_prompted_on = ""
         self._build()
 
@@ -4268,31 +4273,46 @@ class CMS1500Tab(ttk.Frame):
     def _bind_canvas_wheel(self, _event=None):
         self._paper_canvas.bind_all("<MouseWheel>", self._on_canvas_mousewheel)
         self._paper_canvas.bind_all("<Shift-MouseWheel>", self._on_canvas_shift_mousewheel)
+        self._paper_canvas.bind_all("<Control-MouseWheel>", self._on_canvas_zoom_mousewheel)
         self._paper_canvas.bind_all("<Button-4>", self._on_canvas_mousewheel)
         self._paper_canvas.bind_all("<Button-5>", self._on_canvas_mousewheel)
+        self._paper_canvas.bind_all("<Control-Button-4>", self._on_canvas_zoom_mousewheel)
+        self._paper_canvas.bind_all("<Control-Button-5>", self._on_canvas_zoom_mousewheel)
 
     def _unbind_canvas_wheel(self, _event=None):
         self._paper_canvas.unbind_all("<MouseWheel>")
         self._paper_canvas.unbind_all("<Shift-MouseWheel>")
+        self._paper_canvas.unbind_all("<Control-MouseWheel>")
         self._paper_canvas.unbind_all("<Button-4>")
         self._paper_canvas.unbind_all("<Button-5>")
+        self._paper_canvas.unbind_all("<Control-Button-4>")
+        self._paper_canvas.unbind_all("<Control-Button-5>")
 
     def _on_canvas_mousewheel(self, event):
-        if getattr(event, "num", None) == 4:
-            self._paper_canvas.yview_scroll(-1, "units")
+        units = _mousewheel_units(event)
+        if units:
+            self._paper_canvas.yview_scroll(units, "units")
             return "break"
-        if getattr(event, "num", None) == 5:
-            self._paper_canvas.yview_scroll(1, "units")
-            return "break"
-        delta = int(-event.delta / 120) if getattr(event, "delta", 0) else 0
-        if delta:
-            self._paper_canvas.yview_scroll(delta, "units")
-        return "break"
+        return None
 
     def _on_canvas_shift_mousewheel(self, event):
-        delta = int(-event.delta / 120) if getattr(event, "delta", 0) else 0
-        if delta:
-            self._paper_canvas.xview_scroll(delta, "units")
+        units = _mousewheel_units(event)
+        if units:
+            self._paper_canvas.xview_scroll(units, "units")
+            return "break"
+        return None
+
+    def _on_canvas_zoom_mousewheel(self, event):
+        units = _mousewheel_units(event)
+        if not units:
+            return None
+        step = self._paper_zoom_step if units < 0 else -self._paper_zoom_step
+        target_zoom = max(self._paper_zoom_min, min(self._paper_zoom_max, self._paper_zoom + step))
+        if abs(target_zoom - self._paper_zoom) < 0.0001:
+            return "break"
+        self._paper_zoom = target_zoom
+        if self._paper_source_path and Path(self._paper_source_path).exists():
+            self._render_pdf_in_canvas(Path(self._paper_source_path))
         return "break"
 
     def _open_data_editor(self):
@@ -4369,15 +4389,17 @@ class CMS1500Tab(ttk.Frame):
             return False
 
         try:
+            self._paper_source_path = str(pdf_path)
             doc = fitz.open(str(pdf_path))
             page = doc.load_page(0)
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.65, 1.65), alpha=False)
+            render_zoom = self._paper_zoom
+            pix = page.get_pixmap(matrix=fitz.Matrix(render_zoom, render_zoom), alpha=False)
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             self._paper_image = ImageTk.PhotoImage(img)
             self._paper_canvas.delete("all")
             self._paper_canvas.create_image(0, 0, image=self._paper_image, anchor="nw")
             self._paper_canvas.configure(scrollregion=(0, 0, img.width, img.height))
-            self._paper_status.config(text=f"Showing form: {pdf_path.name}", foreground=MUTED)
+            self._paper_status.config(text=f"Showing form: {pdf_path.name} (Zoom {int(render_zoom * 100)}%)", foreground=MUTED)
             doc.close()
             return True
         except Exception as ex:
