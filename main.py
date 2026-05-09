@@ -115,6 +115,8 @@ LICENSE_PREF_KEY = "license_key"
 LICENSE_NAME_PREF_KEY = "license_registered_name"
 LICENSE_EMAIL_PREF_KEY = "license_registered_email"
 UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY = "ui.update_announcement_seen_version"
+UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY = "ui.update_announcement_notes_version"
+UPDATE_ANNOUNCEMENT_NOTES_BODY_PREF_KEY = "ui.update_announcement_notes_body"
 
 # Screen dimensions populated once at startup by TheraTrakApp.__init__.
 # Every dialog reads these instead of calling winfo_screen* individually.
@@ -7327,18 +7329,35 @@ class TheraTrakApp(tk.Tk):
         seen_version = (db.get_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, "") or "").strip()
         if seen_version == current_version:
             return
+
+        notes_version = (db.get_app_preference(UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY, "") or "").strip()
+        notes_body = (db.get_app_preference(UPDATE_ANNOUNCEMENT_NOTES_BODY_PREF_KEY, "") or "").strip()
+
+        details_text = ""
+        if notes_version == current_version and notes_body:
+            details_text = notes_body
+            if len(details_text) > 2400:
+                details_text = (
+                    details_text[:2400].rstrip()
+                    + "\n\n(Release notes truncated. Use Help > Check for Updates for full details.)"
+                )
+
         db.set_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, current_version)
-        messagebox.showinfo(
-            "TheraTrak Pro Updated",
-            (
+
+        if details_text:
+            msg = (
                 f"Welcome back! You're now running {current_version}.\n\n"
-                "What's new in this update:\n"
-                "- CMS-1500 preview is larger on laptop displays\n"
-                "- CMS-1500 mouse-wheel scrolling is smoother\n"
-                "- Ctrl + Mouse Wheel now zooms the CMS-1500 form preview"
-            ),
-            parent=self,
-        )
+                "What's changed in this update:\n\n"
+                f"{details_text}"
+            )
+        else:
+            msg = (
+                f"Welcome back! You're now running {current_version}.\n\n"
+                "This update was installed successfully.\n"
+                "Use Help > Check for Updates to view release details."
+            )
+
+        messagebox.showinfo("TheraTrak Pro Updated", msg, parent=self)
 
     def _open_user_directory(self):
         UserDirectoryDialog(self)
@@ -7898,6 +7917,7 @@ class TheraTrakApp(tk.Tk):
         latest_display = self._format_tag_version(latest_tag) if latest_tag else "Unknown"
         release_url = payload.get("html_url") or GITHUB_RELEASES_PAGE
         installer_asset = self._pick_installer_asset(payload)
+        release_notes = (payload.get("body") or "").strip()
 
         if latest_tuple > current_tuple:
             do_update = messagebox.askyesno(
@@ -7909,6 +7929,10 @@ class TheraTrakApp(tk.Tk):
             )
             if not do_update:
                 return
+
+            # Cache release notes so the next login announcement can show exactly what changed.
+            db.set_app_preference(UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY, latest_display)
+            db.set_app_preference(UPDATE_ANNOUNCEMENT_NOTES_BODY_PREF_KEY, release_notes)
 
             if not installer_asset:
                 messagebox.showwarning(
