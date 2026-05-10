@@ -371,8 +371,9 @@ def main() -> int:
 
     progress_window = Toplevel(root)
     progress_window.title(f"Installing {APP_NAME}")
-    progress_window.resizable(False, False)
+    progress_window.resizable(True, True)
     progress_window.attributes("-topmost", True)
+    progress_window.attributes("-toolwindow", False)
     progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
 
     status_var = StringVar(value="Preparing installer...")
@@ -429,8 +430,9 @@ def main() -> int:
         # Recreate progress window
         progress_window = Toplevel(root)
         progress_window.title(f"Installing {APP_NAME}")
-        progress_window.resizable(False, False)
+        progress_window.resizable(True, True)
         progress_window.attributes("-topmost", True)
+        progress_window.attributes("-toolwindow", False)
         progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
         status_var2 = StringVar(value="Waiting for TheraTrak Pro to close...")
         ttk.Label(progress_window, textvariable=status_var2, width=56).pack(padx=16, pady=(14, 8))
@@ -468,8 +470,9 @@ def main() -> int:
         # Rebuild the real progress window now that the app is gone.
         progress_window = Toplevel(root)
         progress_window.title(f"Installing {APP_NAME}")
-        progress_window.resizable(False, False)
+        progress_window.resizable(True, True)
         progress_window.attributes("-topmost", True)
+        progress_window.attributes("-toolwindow", False)
         progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
         status_var = StringVar(value="Preparing installation folders...")
         status_label = ttk.Label(progress_window, textvariable=status_var, width=56)

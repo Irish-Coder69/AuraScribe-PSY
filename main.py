@@ -1190,9 +1190,14 @@ def fmt_money(v) -> str:
 
 
 def apply_window_icon(window):
+    """Apply icon and ensure window control box (minimize/maximize) is visible."""
     try:
         if ICON_FILE.exists():
             window.iconbitmap(default=str(ICON_FILE))
+    except tk.TclError:
+        pass
+    try:
+        window.attributes("-toolwindow", False)
     except tk.TclError:
         pass
 
@@ -1296,9 +1301,9 @@ class UserDirectoryDialog(tk.Toplevel):
         # ── Read-only info row
         info_frm = ttk.Frame(form)
         info_frm.grid(row=0, column=0, columnspan=6, sticky="ew", padx=4, pady=(4, 2))
-        self._info_id    = ttk.Label(info_frm, text="ID: —",          foreground="#888")
-        self._info_cr    = ttk.Label(info_frm, text="Created: —",     foreground="#888")
-        self._info_login = ttk.Label(info_frm, text="Last Login: —",  foreground="#888")
+        self._info_id = ttk.Label(info_frm, text="ID: —", foreground="#888")
+        self._info_cr = ttk.Label(info_frm, text="Created: —", foreground="#888")
+        self._info_login = ttk.Label(info_frm, text="Last Login: —", foreground="#888")
         self._info_id.pack(side="left", padx=(0, 14))
         self._info_cr.pack(side="left", padx=(0, 14))
         self._info_login.pack(side="left")
@@ -1312,7 +1317,8 @@ class UserDirectoryDialog(tk.Toplevel):
         ttk.Entry(form, textvariable=fv("middle_name")).grid(row=4, column=1, sticky="ew", padx=(0, 4), pady=3)
         ttk.Label(form, text="Role:").grid(row=4, column=4, sticky="e", padx=(4, 2), pady=3)
         ttk.Combobox(
-            form, textvariable=fv("role"),
+            form,
+            textvariable=fv("role"),
             values=["Admin", "User", "Provider", "Billing", "Read-Only"],
             state="readonly",
         ).grid(row=4, column=5, sticky="ew", padx=(0, 8), pady=3)
@@ -1362,11 +1368,19 @@ class UserDirectoryDialog(tk.Toplevel):
         for r in self._rows:
             name = f"{r['first_name']} {r['last_name']}"
             self.tv.insert(
-                "", "end", iid=str(r["id"]),
-                values=(r["id"], r["username"], name, r["role"],
-                        r["email"], r["phone"], "Yes" if r["is_active"] else "No"),
+                "",
+                "end",
+                iid=str(r["id"]),
+                values=(
+                    r["id"],
+                    r["username"],
+                    name,
+                    r["role"],
+                    r["email"],
+                    r["phone"],
+                    "Yes" if r["is_active"] else "No",
+                ),
             )
-
     def _on_select(self, event=None):
         sel = self.tv.selection()
         if not sel:
@@ -2989,6 +3003,10 @@ class BillingDialog(tk.Toplevel):
         _w, _h = _screen_fit(560, 420)
         self.geometry(f"{_w}x{_h}")
         self.resizable(True, True)
+        try:
+            self.state("zoomed")
+        except tk.TclError:
+            pass
         self._vars = {}
         self._session_rows = []
         self._build()
@@ -6139,8 +6157,9 @@ class AppointmentDialog(tk.Toplevel):
 
     def __init__(self, parent, appt_id=None, prefill_date=None, on_save=None):
         super().__init__(parent)
+        apply_window_icon(self)
         self.title("New Appointment" if appt_id is None else "Edit Appointment")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.grab_set()
         self._appt_id = appt_id
         self._on_save = on_save
@@ -6148,7 +6167,16 @@ class AppointmentDialog(tk.Toplevel):
         self._build(prefill_date)
         if appt_id:
             self._load(appt_id)
-        self.after(50, self._center)
+        self.after(50, self._maximize_or_center)
+
+    def _maximize_or_center(self):
+        self.update_idletasks()
+        try:
+            self.state("zoomed")
+            return
+        except tk.TclError:
+            pass
+        self._center()
 
     def _center(self):
         self.update_idletasks()
@@ -7591,7 +7619,12 @@ class TheraTrakApp(tk.Tk):
         dlg = tk.Toplevel(self)
         apply_window_icon(dlg)
         dlg.title("License Registration")
-        dlg.resizable(False, False)
+        dlg.resizable(True, True)
+        try:
+            dlg.state("zoomed")
+        except tk.TclError:
+            _w, _h = _screen_fit(max(900, SCREEN_W - 30), max(560, SCREEN_H - 90), pad=0)
+            dlg.geometry(f"{_w}x{_h}+0+0")
         dlg.transient(self)
         dlg.grab_set()
 
@@ -7765,7 +7798,11 @@ class TheraTrakApp(tk.Tk):
         progress_win = tk.Toplevel(self)
         apply_window_icon(progress_win)
         progress_win.title("Downloading Update")
-        progress_win.resizable(False, False)
+        progress_win.resizable(True, True)
+        try:
+            progress_win.state("zoomed")
+        except tk.TclError:
+            pass
         progress_win.transient(self)
         progress_win.grab_set()
         progress_win.protocol("WM_DELETE_WINDOW", lambda: None)
