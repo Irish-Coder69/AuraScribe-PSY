@@ -1200,6 +1200,28 @@ def apply_window_icon(window):
         window.attributes("-toolwindow", False)
     except tk.TclError:
         pass
+    # On Windows, toggling -toolwindow can strip WS_MINIMIZEBOX / WS_MAXIMIZEBOX
+    # from the underlying Win32 style, making the buttons visible but unclickable.
+    # Explicitly restore them via the Win32 API after the window is created.
+    if sys.platform == "win32":
+        def _restore_chrome():
+            try:
+                import ctypes
+                GWL_STYLE    = -16
+                WS_MINIMIZE  = 0x00020000
+                WS_MAXIMIZE  = 0x00010000
+                # SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+                SWP_FLAGS    = 0x0037
+                hwnd = window.winfo_id()
+                parent = ctypes.windll.user32.GetParent(hwnd)
+                if parent:
+                    hwnd = parent
+                cur = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
+                ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, cur | WS_MINIMIZE | WS_MAXIMIZE)
+                ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_FLAGS)
+            except Exception:
+                pass
+        window.after(0, _restore_chrome)
 
 
 class UserDirectoryDialog(tk.Toplevel):
