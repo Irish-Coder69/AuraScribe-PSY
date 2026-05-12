@@ -1,5 +1,5 @@
 """
-TheraTrak Pro version manager.
+AuraScribe version manager.
 Stores semantic version and build metadata in version.json.
 """
 

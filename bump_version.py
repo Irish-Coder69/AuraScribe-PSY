@@ -1,11 +1,11 @@
-"""CLI helper to bump or set TheraTrak Pro version."""
+"""CLI helper to bump or set AuraScribe version."""
 
 import argparse
 import version_manager as vm
 
 
 def main():
-    parser = argparse.ArgumentParser(description="TheraTrak Pro version manager")
+    parser = argparse.ArgumentParser(description="AuraScribe version manager")
     parser.add_argument(
         "action",
         nargs="?",

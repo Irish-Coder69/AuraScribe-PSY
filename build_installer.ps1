@@ -21,7 +21,7 @@ foreach ($candidate in $pythonCandidates) {
         continue
     }
 }
-$icon = Join-Path $root 'Theratrak-Pro.ico'
+$icon = Join-Path $root 'AuraScribe.ico'
 $mainPy = Join-Path $root 'main.py'
 $installerPy = Join-Path $root 'installer\installer.py'
 $uninstallerPy = Join-Path $root 'installer\uninstaller.py'
@@ -30,7 +30,7 @@ $assetsDir = Join-Path $root 'assets'
 $distDir = Join-Path $root 'dist'
 $buildDir = Join-Path $root 'build'
 $releaseDir = Join-Path $root 'release'
-$installerExe = Join-Path $releaseDir 'TheraTrak-Pro-Installer.exe'
+$installerExe = Join-Path $releaseDir 'AuraScribe-Installer.exe'
 
 if (-not (Test-Path $python)) {
     throw 'No runnable Python virtual environment found. Create .venv311 or .venv before building.'
@@ -82,13 +82,13 @@ VSVersionInfo(
       [
       StringTable(
         u'040904B0',
-        [StringStruct(u'CompanyName', u'TheraTrak'),
+        [StringStruct(u'CompanyName', u'AuraScribe'),
         StringStruct(u'FileDescription', u'$FileDescription'),
         StringStruct(u'FileVersion', u'$VersionStr'),
         StringStruct(u'InternalName', u'$OriginalFilename'),
-        StringStruct(u'LegalCopyright', u'Copyright $CopyYear TheraTrak'),
+        StringStruct(u'LegalCopyright', u'Copyright $CopyYear AuraScribe'),
         StringStruct(u'OriginalFilename', u'$OriginalFilename'),
-        StringStruct(u'ProductName', u'TheraTrak Pro'),
+        StringStruct(u'ProductName', u'AuraScribe'),
         StringStruct(u'ProductVersion', u'$VersionStr')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
@@ -101,12 +101,12 @@ $appVerFile         = Join-Path $buildDir 'version_info_app.txt'
 $installerVerFile   = Join-Path $buildDir 'version_info_installer.txt'
 $uninstallerVerFile = Join-Path $buildDir 'version_info_uninstaller.txt'
 
-New-VersionInfoFile -FilePath $appVerFile -FileDescription 'TheraTrak Pro - Practice Management' `
-    -OriginalFilename 'TheraTrak Pro.exe' -VersionTuple $verTuple -VersionStr $verStr -CopyYear $copyYear
-New-VersionInfoFile -FilePath $installerVerFile -FileDescription 'TheraTrak Pro Installer' `
-    -OriginalFilename 'TheraTrak-Pro-Installer.exe' -VersionTuple $verTuple -VersionStr $verStr -CopyYear $copyYear
-New-VersionInfoFile -FilePath $uninstallerVerFile -FileDescription 'TheraTrak Pro Uninstaller' `
-    -OriginalFilename 'TheraTrak Pro Uninstaller.exe' -VersionTuple $verTuple -VersionStr $verStr -CopyYear $copyYear
+New-VersionInfoFile -FilePath $appVerFile -FileDescription 'AuraScribe - Practice Management' `
+    -OriginalFilename 'AuraScribe.exe' -VersionTuple $verTuple -VersionStr $verStr -CopyYear $copyYear
+New-VersionInfoFile -FilePath $installerVerFile -FileDescription 'AuraScribe Installer' `
+    -OriginalFilename 'AuraScribe-Installer.exe' -VersionTuple $verTuple -VersionStr $verStr -CopyYear $copyYear
+New-VersionInfoFile -FilePath $uninstallerVerFile -FileDescription 'AuraScribe Uninstaller' `
+    -OriginalFilename 'AuraScribe Uninstaller.exe' -VersionTuple $verTuple -VersionStr $verStr -CopyYear $copyYear
 
 Write-Host "EXE version metadata files generated for v$verStr."
 
@@ -116,7 +116,7 @@ $pyInstallerArgs = @(
     '--clean',
     '--windowed',
     '--onedir',
-    '--name', 'TheraTrak Pro',
+    '--name', 'AuraScribe',
     '--icon', $icon,
     '--distpath', $distDir,
     '--workpath', (Join-Path $buildDir 'app'),
@@ -144,13 +144,18 @@ $pyInstallerArgs = @(
 & $python @pyInstallerArgs
 
 # Copy version.json to the app dist folder so the standalone dist build knows its version.
-$versionJsonDest = Join-Path $distDir 'TheraTrak Pro\version.json'
+$versionJsonDest = Join-Path $distDir 'AuraScribe\version.json'
 Copy-Item $versionJson $versionJsonDest -Force
 Write-Host "Copied version.json to dist."
 
+# Copy app icon into the app dist folder so runtime icon loading can find it.
+$iconDest = Join-Path $distDir 'AuraScribe\AuraScribe.ico'
+Copy-Item $icon $iconDest -Force
+Write-Host "Copied AuraScribe.ico to dist."
+
 # Copy CMS-1500 fillable template into the app dist folder so it ships with the installer.
 $cmsTemplate = Join-Path $root 'CMS1500_template.pdf'
-$cmsTemplateDest = Join-Path $distDir 'TheraTrak Pro\CMS1500_template.pdf'
+$cmsTemplateDest = Join-Path $distDir 'AuraScribe\CMS1500_template.pdf'
 if (Test-Path $cmsTemplate) {
     Copy-Item $cmsTemplate $cmsTemplateDest -Force
     Write-Host "Copied CMS1500_template.pdf to dist."
@@ -164,7 +169,7 @@ $cmsBackTemplates = @(
 )
 $cmsBackTemplate = $cmsBackTemplates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($cmsBackTemplate) {
-    $cmsBackTemplateDest = Join-Path $distDir ('TheraTrak Pro\' + (Split-Path $cmsBackTemplate -Leaf))
+    $cmsBackTemplateDest = Join-Path $distDir ('AuraScribe\' + (Split-Path $cmsBackTemplate -Leaf))
     Copy-Item $cmsBackTemplate $cmsBackTemplateDest -Force
     Write-Host "Copied $(Split-Path $cmsBackTemplate -Leaf) to dist."
 }
@@ -175,7 +180,7 @@ $uninstallerArgs = @(
     '--clean',
     '--windowed',
     '--onefile',
-    '--name', 'TheraTrak Pro Uninstaller',
+    '--name', 'AuraScribe Uninstaller',
     '--icon', $icon,
     '--distpath', $distDir,
     '--workpath', (Join-Path $buildDir 'uninstaller'),
@@ -192,13 +197,13 @@ $installerArgs = @(
     '--clean',
     '--windowed',
     '--onefile',
-    '--name', 'TheraTrak-Pro-Installer',
+    '--name', 'AuraScribe-Installer',
     '--icon', $icon,
     '--distpath', $releaseDir,
     '--workpath', (Join-Path $buildDir 'installer'),
     '--specpath', $buildDir,
-    '--add-data', ((Join-Path $distDir 'TheraTrak Pro') + ';app'),
-    '--add-data', ((Join-Path $distDir 'TheraTrak Pro Uninstaller.exe') + ';.'),
+    '--add-data', ((Join-Path $distDir 'AuraScribe') + ';app'),
+    '--add-data', ((Join-Path $distDir 'AuraScribe Uninstaller.exe') + ';.'),
     '--add-data', ($icon + ';.'),
     '--add-data', ($versionJson + ';.'),
     '--version-file', $installerVerFile,

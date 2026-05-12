@@ -1,6 +1,6 @@
 Option Explicit
 ' DEVELOPER LAUNCH SCRIPT - Requires Python (venv) on this machine.
-' End users should run the installed TheraTrak Pro.exe created by build_installer.ps1.
+' End users should run the installed AuraScribe.exe created by build_installer.ps1.
 
 Dim shell, fso, scriptDir, mainPy, venvPythonw, cmd
 
@@ -12,7 +12,7 @@ mainPy = fso.BuildPath(scriptDir, "main.py")
 venvPythonw = fso.BuildPath(fso.BuildPath(scriptDir, ".venv\Scripts"), "pythonw.exe")
 
 If Not fso.FileExists(mainPy) Then
-    MsgBox "main.py was not found in this folder.", vbCritical, "TheraTrak Pro"
+    MsgBox "main.py was not found in this folder.", vbCritical, "AuraScribe"
     WScript.Quit 1
 End If
 

@@ -23,7 +23,7 @@ def get_resource_root() -> Path:
 
 APP_ROOT = get_app_root()
 RESOURCE_ROOT = get_resource_root()
-ICON_FILE = APP_ROOT / "Theratrak-Pro.ico"
+ICON_FILE = APP_ROOT / "AuraScribe.ico"
 VERSION_FILE = APP_ROOT / "version.json"
 DB_FILE = APP_ROOT / "theratrak.db"
 ASSETS_DIR = RESOURCE_ROOT / "assets"

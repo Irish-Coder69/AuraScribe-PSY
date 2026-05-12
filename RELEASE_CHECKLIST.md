@@ -1,4 +1,4 @@
-# TheraTrak Pro Release Checklist
+# AuraScribe Release Checklist
 
 ## Pre-Release
 - Confirm `version.json` is updated (major/minor/patch/build).
@@ -10,18 +10,18 @@
 
 ## Build
 - Run `./build_installer.ps1` from repo root.
-- Confirm output line: `Installer created at: L:\TheraTrak Pro\release\TheraTrak-Pro-Installer.exe`.
+- Confirm output line: `Installer created at: L:\AuraScribe\release\AuraScribe-Installer.exe`.
 - Smoke test installer on local machine (install + launch).
 - Smoke test app startup and Help > Check for Updates.
 
 ## Commit and Push
 - Commit source/version changes.
-- Do NOT commit `release/TheraTrak-Pro-Installer.exe` (upload it only in GitHub Release).
+- Do NOT commit `release/AuraScribe-Installer.exe` (upload it only in GitHub Release).
 - Push to `main`.
 
 ## Publish GitHub Release
 - Create tag: `v<major>.<minor>.<patch>-build<build>`.
-- Upload `release/TheraTrak-Pro-Installer.exe` as release asset.
+- Upload `release/AuraScribe-Installer.exe` as release asset.
 - Ensure release is marked `Latest` (not draft/prerelease).
 
 ## Post-Release Validation

@@ -1,10 +1,10 @@
-# TheraTrak Pro User Guide
+# AuraScribe User Guide
 
-This guide covers the main workflow for TheraTrak Pro.
+This guide covers the main workflow for AuraScribe.
 
 ## 1. Getting Started
 
-1. Launch TheraTrak Pro.
+1. Launch AuraScribe.
 2. Sign in with your username and password.
 3. If this is first use, create an account from the login screen.
 

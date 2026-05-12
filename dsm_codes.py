@@ -1,5 +1,5 @@
 """
-DSM-5 / ICD-10 mental health diagnostic codes for TheraTrak Pro.
+DSM-5 / ICD-10 mental health diagnostic codes for AuraScribe.
 Format: (code, description, category)
 """
 

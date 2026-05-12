@@ -10,15 +10,16 @@ import json
 import ctypes
 from uuid import UUID
 from pathlib import Path
-from tkinter import DoubleVar, Tk, Toplevel, StringVar, messagebox, ttk
+from tkinter import DoubleVar, Tk, Toplevel, StringVar, filedialog, messagebox, ttk
 
 
-APP_NAME = "TheraTrak Pro"
-APP_EXE = "TheraTrak Pro.exe"
-UNINSTALL_EXE = "TheraTrak Pro Uninstaller.exe"
+APP_NAME = "AuraScribe"
+APP_EXE = "AuraScribe.exe"
+UNINSTALL_EXE = "AuraScribe Uninstaller.exe"
 APP_BUNDLE_DIR = "app"
-UNINSTALL_CMD = "Uninstall TheraTrak Pro.cmd"
-ICON_FILE = "Theratrak-Pro.ico"
+UNINSTALL_CMD = "Uninstall AuraScribe.cmd"
+UNINSTALL_SHORTCUT_NAME = "Uninstall AuraScribe.lnk"
+ICON_FILE = "AuraScribe.ico"
 VERSION_FILE = "version.json"
 LEGACY_START_MENU_FOLDERS = ("Thorough Track Pro", "TheraTrak-Pro")
 LEGACY_ROOT_SHORTCUTS = ("TheraTrak Pro.lnk", "Uninstall TheraTrak Pro.lnk")
@@ -40,7 +41,7 @@ def _find_bundled_python_dll(app_bundle_dir: Path) -> Path | None:
 
 
 def _is_app_running() -> bool:
-    """Return True if TheraTrak Pro.exe has any running instances."""
+    """Return True if the packaged app executable is currently running."""
     try:
         result = subprocess.run(
             ["tasklist", "/FI", f"IMAGENAME eq {APP_EXE}", "/NH", "/FO", "CSV"],
@@ -68,7 +69,7 @@ def _stop_running_app() -> None:
 
 
 def _wait_for_app_exit(timeout: float = 10.0) -> bool:
-    """Wait up to *timeout* seconds for TheraTrak Pro to fully exit.
+    """Wait up to *timeout* seconds for the app to fully exit.
 
     Returns True when the process is gone, False if it is still running
     after the timeout.
@@ -176,6 +177,247 @@ def install_dir() -> Path:
     return Path(os.environ["LOCALAPPDATA"]) / "Programs" / APP_NAME
 
 
+def _can_write_to_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".aurascribe_write_test.tmp"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
+    import tkinter as tk
+
+    # ── Palette ─────────────────────────────────────────────────────────────
+    # Header: warm sky-blue gradient (uplifting, open, calming)
+    C_GRAD_TOP  = (110, 195, 232)   # #6ec3e8  — light sky blue
+    C_GRAD_BOT  = (58,  140, 195)   # #3a8cc3  — medium sky blue
+    C_HDR_TEXT  = "#ffffff"
+    C_HDR_SUB   = "#d6eef8"
+    C_DIVIDER   = "#3a8cc3"
+    C_BODY_BG   = "#f5f7fa"
+    C_LABEL_FG  = "#1a2535"
+    C_SUB_FG    = "#556070"
+    C_ENTRY_BG  = "#ffffff"
+    C_ENTRY_HI  = "#3a8cc3"
+    C_BROWSE_BG = "#ddeef8"
+    C_BROWSE_FG = "#1d5f8a"
+    C_BTN_INST  = "#3a8cc3"
+    C_BTN_CNCL  = "#6b7280"
+    C_BTN_FG    = "#ffffff"
+    C_BAR_BG    = "#e4ecf4"
+
+    FONT_TITLE  = ("Segoe UI", 17, "bold")
+    FONT_SUB    = ("Segoe UI", 9)
+    FONT_LABEL  = ("Segoe UI", 10)
+    FONT_ENTRY  = ("Segoe UI", 10)
+    FONT_BTN    = ("Segoe UI", 10, "bold")
+    FONT_BROWSE = ("Segoe UI", 9)
+
+    DIALOG_W = 580
+    HEADER_H = 122
+
+    dialog = Toplevel(root)
+    dialog.title(f"Install {APP_NAME}")
+    dialog.resizable(False, False)
+    dialog.configure(bg=C_BODY_BG)
+    dialog.attributes("-topmost", True)
+    dialog.grab_set()
+    dialog.minsize(DIALOG_W, 1)
+
+    # ── Header canvas: gradient + "A-with-waveform" logo ────────────────────
+    hdr = tk.Canvas(dialog, width=DIALOG_W, height=HEADER_H, highlightthickness=0)
+    hdr.pack(fill="x")
+
+    # Gradient fill
+    r0, g0, b0 = C_GRAD_TOP
+    r1, g1, b1 = C_GRAD_BOT
+    for i in range(HEADER_H):
+        t = i / max(1, HEADER_H - 1)
+        r = int(r0 + (r1 - r0) * t)
+        g = int(g0 + (g1 - g0) * t)
+        b = int(b0 + (b1 - b0) * t)
+        hdr.create_line(0, i, DIALOG_W, i, fill=f"#{r:02x}{g:02x}{b:02x}")
+
+    # ── Logo: clean thin-lined "A" — crossbar replaced by audio waveform ─────
+    #
+    #          apex
+    #           /\
+    #          /  \       ← thin white legs, line-width 1.8
+    #         /~~~~\      ← waveform instead of flat crossbar
+    #        /      \
+    #
+    cx   = DIALOG_W // 2    # horizontal centre
+    a_y  = 8                # apex y
+    b_y  = 52               # bottom y
+    hw   = 24               # half-width at bottom
+
+    # left and right legs
+    hdr.create_line(cx, a_y, cx - hw, b_y, fill="white", width=1.8,
+                    capstyle="round")
+    hdr.create_line(cx, a_y, cx + hw, b_y, fill="white", width=1.8,
+                    capstyle="round")
+
+    # crossbar position (55 % of the way from apex to base)
+    t_c   = 0.55
+    wf_y  = a_y + (b_y - a_y) * t_c          # y of the crossbar ≈ 34
+    wf_xl = cx - hw * t_c                     # left  leg x at that height
+    wf_xr = cx + hw * t_c                     # right leg x at that height
+
+    # Waveform control points (nx in [-1,1], ny: negative = up on screen)
+    # Mimics a compact voice waveform — quiet at edges, animated in the middle
+    wf_nodes = [
+        (-1.00,  0.00),
+        (-0.80, -0.30),
+        (-0.58, -0.80),
+        (-0.36,  0.25),
+        (-0.14, -1.00),
+        ( 0.08,  0.40),
+        ( 0.28, -0.70),
+        ( 0.50,  0.20),
+        ( 0.72, -0.50),
+        ( 0.88, -0.20),
+        ( 1.00,  0.00),
+    ]
+    amp    = 5.0
+    wf_pts = []
+    span   = wf_xr - wf_xl
+    for nx, ny in wf_nodes:
+        wf_pts.append(wf_xl + (nx + 1) / 2.0 * span)
+        wf_pts.append(wf_y + ny * amp)
+
+    hdr.create_line(*wf_pts, fill="white", width=1.6,
+                    smooth=True, capstyle="round", joinstyle="round")
+
+    # App name and subtitle drawn on the canvas
+    hdr.create_text(cx, b_y + 18, text=APP_NAME,
+                    font=FONT_TITLE, fill=C_HDR_TEXT, anchor="center")
+    hdr.create_text(cx, b_y + 40, text="Setup Wizard",
+                    font=FONT_SUB, fill=C_HDR_SUB, anchor="center")
+
+    # ── Accent divider ───────────────────────────────────────────────────────
+    tk.Frame(dialog, bg=C_DIVIDER, height=3).pack(fill="x")
+
+    # ── Body ─────────────────────────────────────────────────────────────────
+    body = tk.Frame(dialog, bg=C_BODY_BG, padx=28, pady=22)
+    body.pack(fill="both", expand=True)
+
+    tk.Label(body, text="Choose Installation Folder",
+             font=("Segoe UI", 11, "bold"), bg=C_BODY_BG,
+             fg=C_LABEL_FG).pack(anchor="w")
+    tk.Label(body,
+             text="Select where AuraScribe should be installed on your computer.",
+             font=FONT_LABEL, bg=C_BODY_BG, fg=C_SUB_FG).pack(anchor="w",
+                                                                pady=(2, 16))
+
+    # ── Path row ─────────────────────────────────────────────────────────────
+    path_var  = StringVar(value=str(default_path))
+    path_frame = tk.Frame(body, bg=C_BODY_BG)
+    path_frame.pack(fill="x")
+
+    tk.Label(path_frame, text="Install to:", font=FONT_LABEL,
+             bg=C_BODY_BG, fg=C_LABEL_FG, width=9,
+             anchor="w").pack(side="left")
+
+    entry = tk.Entry(path_frame, textvariable=path_var, font=FONT_ENTRY,
+                     bg=C_ENTRY_BG, fg=C_LABEL_FG, relief="flat",
+                     highlightthickness=1, highlightbackground=C_ENTRY_HI,
+                     highlightcolor=C_ENTRY_HI, insertbackground=C_ENTRY_HI,
+                     width=44)
+    entry.pack(side="left", fill="x", expand=True, ipady=5)
+
+    def _browse() -> None:
+        start_dir = Path(path_var.get().strip() or str(default_path))
+        selected = filedialog.askdirectory(
+            parent=dialog,
+            title=f"Select {APP_NAME} install folder",
+            initialdir=str(start_dir.parent if start_dir.parent.exists()
+                           else start_dir),
+            mustexist=False,
+        )
+        if selected:
+            path_var.set(selected)
+
+    tk.Button(path_frame, text="Browse…", font=FONT_BROWSE,
+              bg=C_BROWSE_BG, fg=C_BROWSE_FG, relief="flat", cursor="hand2",
+              padx=10, pady=5, command=_browse,
+              activebackground="#b8d8ef",
+              activeforeground=C_BROWSE_FG).pack(side="left", padx=(8, 0))
+
+    tk.Label(body, text="Default: %LOCALAPPDATA%\\Programs\\AuraScribe",
+             font=("Segoe UI", 8), bg=C_BODY_BG,
+             fg="#aaaaaa").pack(anchor="w", pady=(6, 0))
+
+    result: dict[str, Path | None] = {"path": None}
+
+    def _install() -> None:
+        raw = path_var.get().strip().strip('"')
+        if not raw:
+            messagebox.showerror(APP_NAME,
+                                 "Please choose an installation folder.",
+                                 parent=dialog)
+            return
+        target = Path(raw)
+        if target.exists() and target.is_file():
+            messagebox.showerror(APP_NAME,
+                                 "Install path points to a file, not a folder.",
+                                 parent=dialog)
+            return
+        if not _can_write_to_dir(target):
+            messagebox.showerror(APP_NAME,
+                                 "AuraScribe cannot write to this folder.\n"
+                                 "Choose another location.",
+                                 parent=dialog)
+            return
+        result["path"] = target
+        dialog.destroy()
+
+    def _cancel() -> None:
+        dialog.destroy()
+
+    # ── Bottom bar ────────────────────────────────────────────────────────────
+    bar = tk.Frame(dialog, bg=C_BAR_BG, pady=12)
+    bar.pack(fill="x", side="bottom")
+
+    cancel_btn = tk.Button(bar, text="Cancel", font=FONT_BTN,
+                           bg=C_BTN_CNCL, fg=C_BTN_FG, relief="flat",
+                           padx=20, pady=7, cursor="hand2", command=_cancel,
+                           activebackground="#4b5563",
+                           activeforeground=C_BTN_FG)
+    cancel_btn.pack(side="right", padx=(0, 20))
+    cancel_btn.bind("<Enter>", lambda e: cancel_btn.configure(bg="#4b5563"))
+    cancel_btn.bind("<Leave>", lambda e: cancel_btn.configure(bg=C_BTN_CNCL))
+
+    install_btn = tk.Button(bar, text="Install  →", font=FONT_BTN,
+                            bg=C_BTN_INST, fg=C_BTN_FG, relief="flat",
+                            padx=20, pady=7, cursor="hand2", command=_install,
+                            activebackground="#1d5f8a",
+                            activeforeground=C_BTN_FG)
+    install_btn.pack(side="right", padx=(0, 8))
+    install_btn.bind("<Enter>", lambda e: install_btn.configure(bg="#1d5f8a"))
+    install_btn.bind("<Leave>", lambda e: install_btn.configure(bg=C_BTN_INST))
+
+    dialog.bind("<Return>", lambda e: _install())
+    dialog.bind("<Escape>", lambda e: _cancel())
+
+    # ── Centre on screen ──────────────────────────────────────────────────────
+    dialog.update_idletasks()
+    w  = max(DIALOG_W, dialog.winfo_reqwidth())
+    h  = dialog.winfo_reqheight()
+    sx = dialog.winfo_screenwidth()
+    sy = dialog.winfo_screenheight()
+    dialog.geometry(f"{w}x{h}+{max(0,(sx-w)//2)}+{max(0,(sy-h)//2)}")
+
+    entry.focus_set()
+    dialog.deiconify()
+    dialog.lift()
+    dialog.wait_window()
+    return result["path"]
+
+
 def start_menu_program_dirs() -> list[Path]:
     candidates = [
         Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
@@ -275,23 +517,32 @@ def write_uninstall_cmd(target: Path) -> Path:
     script = (
         "@echo off\n"
         "setlocal\n"
-        "set \"LOG=%TEMP%\\theratrak-uninstall.log\"\n"
+        "set \"LOG=%TEMP%\\aurascribe-uninstall.log\"\n"
         "echo [%date% %time%] Uninstall started>\"%LOG%\"\n"
         "cd /d \"%~dp0\"\n"
         "echo [%date% %time%] Working dir: %cd%>>\"%LOG%\"\n"
-        "taskkill /IM \"TheraTrak Pro.exe\" /F >>\"%LOG%\" 2>&1\n"
+        f"taskkill /IM \"{APP_EXE}\" /F >>\"%LOG%\" 2>&1\\n"
         "for %%P in (\"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\" \"%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs\" \"%USERPROFILE%\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\") do (\n"
         "  echo [%date% %time%] Cleaning Programs root: %%~P>>\"%LOG%\"\n"
+        "  del /f /q \"%%~P\\AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
+        "  del /f /q \"%%~P\\Uninstall AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
         "  del /f /q \"%%~P\\TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
         "  del /f /q \"%%~P\\Uninstall TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
+        "  rmdir /s /q \"%%~P\\AuraScribe\" >>\"%LOG%\" 2>&1\n"
         "  rmdir /s /q \"%%~P\\TheraTrak Pro\" >>\"%LOG%\" 2>&1\n"
         "  rmdir /s /q \"%%~P\\Thorough Track Pro\" >>\"%LOG%\" 2>&1\n"
         "  rmdir /s /q \"%%~P\\TheraTrak-Pro\" >>\"%LOG%\" 2>&1\n"
         ")\n"
+        "del /f /q \"%USERPROFILE%\\Desktop\\AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
+        "if defined OneDrive del /f /q \"%OneDrive%\\Desktop\\AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
         "del /f /q \"%USERPROFILE%\\Desktop\\TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
         "if defined OneDrive del /f /q \"%OneDrive%\\Desktop\\TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
+        "rmdir /s /q \"%LOCALAPPDATA%\\Temp\\AuraScribeUpdates\" >>\"%LOG%\" 2>&1\n"
         "rmdir /s /q \"%LOCALAPPDATA%\\Temp\\TheraTrakUpdates\" >>\"%LOG%\" 2>&1\n"
+        "del /f /q \"%LOCALAPPDATA%\\Temp\\run_aurascribe_update.bat\" >>\"%LOG%\" 2>&1\n"
         "del /f /q \"%LOCALAPPDATA%\\Temp\\run_theratrak_update.bat\" >>\"%LOG%\" 2>&1\n"
+        "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AuraScribe\" /f >>\"%LOG%\" 2>&1\n"
+        "reg delete \"HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AuraScribe\" /f >>\"%LOG%\" 2>&1\n"
         "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TheraTrak Pro\" /f >>\"%LOG%\" 2>&1\n"
         "reg delete \"HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TheraTrak Pro\" /f >>\"%LOG%\" 2>&1\n"
         "echo [%date% %time%] Refreshing Start menu host>>\"%LOG%\"\n"
@@ -299,11 +550,11 @@ def write_uninstall_cmd(target: Path) -> Path:
         "taskkill /IM explorer.exe /F >>\"%LOG%\" 2>&1\n"
         "start \"\" explorer.exe\n"
         "set \"TARGET=%~dp0\"\n"
-        "set \"CLEANUP=%TEMP%\\theratrak_uninstall_cleanup.cmd\"\n"
+        "set \"CLEANUP=%TEMP%\\aurascribe_uninstall_cleanup.cmd\"\n"
         ">\"%CLEANUP%\" echo @echo off\n"
         ">>\"%CLEANUP%\" echo set TARGET=%%~1\n"
         ">>\"%CLEANUP%\" echo for /L %%%%i in ^(1,1,20^) do ^(\n"
-        ">>\"%CLEANUP%\" echo   rmdir /s /q \"%%TARGET%%\" ^>^>\"%%TEMP%%\\theratrak-uninstall.log\" 2^>^&1\n"
+        ">>\"%CLEANUP%\" echo   rmdir /s /q \"%%TARGET%%\" ^>^>\"%%TEMP%%\\aurascribe-uninstall.log\" 2^>^&1\n"
         ">>\"%CLEANUP%\" echo   if not exist \"%%TARGET%%\" goto done\n"
         ">>\"%CLEANUP%\" echo   ping 127.0.0.1 -n 2 ^>nul\n"
         ">>\"%CLEANUP%\" echo ^)\n"
@@ -317,14 +568,14 @@ def write_uninstall_cmd(target: Path) -> Path:
 
 
 def write_uninstall_registry(target: Path, uninstall_cmd: Path, version: str) -> None:
-    uninstall_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\TheraTrak Pro"
+    uninstall_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraScribe"
     app_exe = target / APP_EXE
     comspec = Path(os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe"))
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, uninstall_path)
     try:
         winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
         winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version)
-        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "TheraTrak")
+        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "AuraScribe")
         winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(target))
         winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, str(app_exe))
         winreg.SetValueEx(
@@ -338,6 +589,143 @@ def write_uninstall_registry(target: Path, uninstall_cmd: Path, version: str) ->
         winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
     finally:
         winreg.CloseKey(key)
+
+
+def _build_progress_window(
+    root: Tk,
+    screen_w: int,
+    screen_h: int,
+    initial_status: str = "Preparing...",
+    indeterminate: bool = False,
+) -> tuple:
+    """Return (window, set_progress) — a styled progress window matching the installer UI."""
+    import tkinter as tk
+
+    C_GRAD_TOP = (110, 195, 232)
+    C_GRAD_BOT = (58,  140, 195)
+    C_BODY_BG  = "#f5f7fa"
+    C_SUB_FG   = "#556070"
+    C_BAR_BG   = "#d8e8f2"
+    C_DIVIDER  = "#3a8cc3"
+    WIN_W      = 520
+    HEADER_H   = 62
+
+    win = Toplevel(root)
+    win.title(f"Installing {APP_NAME}")
+    win.resizable(False, False)
+    win.configure(bg=C_BODY_BG)
+    win.attributes("-topmost", True)
+    win.attributes("-toolwindow", False)
+    win.protocol("WM_DELETE_WINDOW", lambda: None)
+
+    # Gradient header
+    hdr = tk.Canvas(win, width=WIN_W, height=HEADER_H, highlightthickness=0)
+    hdr.pack(fill="x")
+    r0, g0, b0 = C_GRAD_TOP
+    r1, g1, b1 = C_GRAD_BOT
+    for i in range(HEADER_H):
+        t = i / max(1, HEADER_H - 1)
+        r = int(r0 + (r1 - r0) * t)
+        g = int(g0 + (g1 - g0) * t)
+        b = int(b0 + (b1 - b0) * t)
+        hdr.create_line(0, i, WIN_W, i, fill=f"#{r:02x}{g:02x}{b:02x}")
+    hdr.create_text(WIN_W // 2, HEADER_H // 2 - 6, text=APP_NAME,
+                    font=("Segoe UI", 14, "bold"), fill="white", anchor="center")
+    hdr.create_text(WIN_W // 2, HEADER_H // 2 + 13, text="Installing, please wait…",
+                    font=("Segoe UI", 8), fill="#d6eef8", anchor="center")
+
+    tk.Frame(win, bg=C_DIVIDER, height=3).pack(fill="x")
+
+    body = tk.Frame(win, bg=C_BODY_BG, padx=24, pady=18)
+    body.pack(fill="both", expand=True)
+
+    status_var = StringVar(value=initial_status)
+    tk.Label(body, textvariable=status_var, font=("Segoe UI", 9),
+             bg=C_BODY_BG, fg=C_SUB_FG, anchor="w",
+             wraplength=WIN_W - 48).pack(anchor="w", pady=(0, 10))
+
+    BAR_W = WIN_W - 48
+    BAR_H = 16
+
+    bar_canvas = tk.Canvas(body, width=BAR_W, height=BAR_H,
+                           bg=C_BAR_BG, highlightthickness=0)
+    bar_canvas.pack(anchor="w")
+
+    if indeterminate:
+        _state = {"pos": -(BAR_W // 3), "active": True}
+        BLOCK = BAR_W // 4
+
+        def _animate() -> None:
+            if not _state["active"]:
+                return
+            bar_canvas.delete("all")
+            bar_canvas.create_rectangle(0, 0, BAR_W, BAR_H, fill=C_BAR_BG, outline="")
+            x = _state["pos"]
+            x1, x2 = max(0, x), min(x + BLOCK, BAR_W)
+            if x1 < x2:
+                for px in range(x1, x2):
+                    t  = px / max(1, BAR_W - 1)
+                    rr = int(110 + (58  - 110) * t)
+                    gg = int(195 + (140 - 195) * t)
+                    bb = int(232 + (195 - 232) * t)
+                    bar_canvas.create_line(px, 0, px, BAR_H,
+                                           fill=f"#{rr:02x}{gg:02x}{bb:02x}")
+            _state["pos"] = x + 8
+            if _state["pos"] > BAR_W:
+                _state["pos"] = -BLOCK
+            win.after(25, _animate)
+
+        _animate()
+
+        def set_progress(pct: float, status: str) -> None:
+            status_var.set(status)
+            win.update()
+
+        _orig_destroy = win.destroy
+
+        def _destroy_patched() -> None:
+            _state["active"] = False
+            _orig_destroy()
+
+        win.destroy = _destroy_patched  # type: ignore[method-assign]
+
+    else:
+        pct_label = tk.Label(body, text="0%", font=("Segoe UI", 8),
+                             bg=C_BODY_BG, fg=C_SUB_FG, anchor="e")
+        pct_label.pack(anchor="e", pady=(3, 0))
+
+        def _draw_bar(pct: float) -> None:
+            bar_canvas.delete("all")
+            bar_canvas.create_rectangle(0, 0, BAR_W, BAR_H,
+                                        fill=C_BAR_BG, outline="")
+            filled = int(BAR_W * pct / 100)
+            for px in range(filled):
+                t  = px / max(1, BAR_W - 1)
+                rr = int(110 + (58  - 110) * t)
+                gg = int(195 + (140 - 195) * t)
+                bb = int(232 + (195 - 232) * t)
+                bar_canvas.create_line(px, 0, px, BAR_H,
+                                       fill=f"#{rr:02x}{gg:02x}{bb:02x}")
+
+        _draw_bar(0)
+
+        def set_progress(pct: float, status: str) -> None:
+            pct = max(0.0, min(100.0, pct))
+            _draw_bar(pct)
+            pct_label.configure(text=f"{int(pct)}%")
+            status_var.set(status)
+            win.update()
+
+    win.update_idletasks()
+    ww = max(WIN_W, win.winfo_reqwidth())
+    wh = win.winfo_reqheight()
+    win.geometry(f"{ww}x{wh}+{max(0,(screen_w-ww)//2)}+{max(0,(screen_h-wh)//2)}")
+    win.deiconify()
+    win.lift()
+    win.focus_force()
+    win.update()
+
+    return win, set_progress
 
 
 def main() -> int:
@@ -358,66 +746,26 @@ def main() -> int:
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
 
-    proceed = messagebox.askyesno(
-        APP_NAME,
-        "This will install TheraTrak Pro on your computer.\n\n"
-        "Do you want to continue?",
-        parent=root,
-    )
-    if not proceed:
+    target = choose_install_dir(root, install_dir())
+    if target is None:
         messagebox.showinfo(APP_NAME, "Installation canceled.", parent=root)
         root.destroy()
         return 0
 
-    progress_window = Toplevel(root)
-    progress_window.title(f"Installing {APP_NAME}")
-    progress_window.resizable(True, True)
-    progress_window.attributes("-topmost", True)
-    progress_window.attributes("-toolwindow", False)
-    progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
-
-    status_var = StringVar(value="Preparing installer...")
-    status_label = ttk.Label(progress_window, textvariable=status_var, width=56)
-    status_label.pack(padx=16, pady=(14, 8))
-
-    progress_var = DoubleVar(value=0)
-    progress_bar = ttk.Progressbar(
-        progress_window,
-        orient="horizontal",
-        mode="determinate",
-        length=460,
-        maximum=100,
-        variable=progress_var,
+    progress_window, set_progress = _build_progress_window(
+        root, screen_w, screen_h, "Preparing installer..."
     )
-    progress_bar.pack(padx=16, pady=(0, 14))
-
-    progress_window.update_idletasks()
-    win_w = max(500, progress_window.winfo_reqwidth() + 8)
-    win_h = max(120, progress_window.winfo_reqheight() + 8)
-    win_x = max(0, (screen_w - win_w) // 2)
-    win_y = max(0, (screen_h - win_h) // 2)
-    progress_window.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
-    progress_window.deiconify()
-    progress_window.lift()
-    progress_window.focus_force()
-    progress_window.update()
-
-    def set_progress(percent: float, status: str) -> None:
-        progress_var.set(max(0, min(100, percent)))
-        status_var.set(status)
-        progress_window.update()
 
     source = bundled_dir()
-    target = install_dir()
 
-    # If TheraTrak Pro is currently open, ask the user to let the installer
+    # If AuraScribe is currently open, ask the user to let the installer
     # close it.  Attempting to overwrite locked DLLs inside _internal/ causes
     # WinError 32 (sharing violation) on the copy step.
     if _is_app_running():
         progress_window.destroy()
         close_it = messagebox.askyesno(
             APP_NAME,
-            "TheraTrak Pro is currently open.\n\n"
+            "AuraScribe is currently open.\n\n"
             "It must be closed before the installer can update the files.\n"
             "Click Yes to close it automatically and continue, or No to cancel.",
             parent=root,
@@ -427,81 +775,31 @@ def main() -> int:
             root.destroy()
             return 0
         _stop_running_app()
-        # Recreate progress window
-        progress_window = Toplevel(root)
-        progress_window.title(f"Installing {APP_NAME}")
-        progress_window.resizable(True, True)
-        progress_window.attributes("-topmost", True)
-        progress_window.attributes("-toolwindow", False)
-        progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
-        status_var2 = StringVar(value="Waiting for TheraTrak Pro to close...")
-        ttk.Label(progress_window, textvariable=status_var2, width=56).pack(padx=16, pady=(14, 8))
-        progress_var2 = DoubleVar(value=0)
-        progress_bar2 = ttk.Progressbar(
-            progress_window, orient="horizontal", mode="indeterminate", length=460
+        # Recreate progress window (indeterminate — waiting for app to exit)
+        progress_window, _wait_set = _build_progress_window(
+            root, screen_w, screen_h,
+            "Waiting for AuraScribe to close…",
+            indeterminate=True,
         )
-        progress_bar2.pack(padx=16, pady=(0, 14))
-        progress_window.update_idletasks()
-        win_w2 = max(500, progress_window.winfo_reqwidth() + 8)
-        win_h2 = max(120, progress_window.winfo_reqheight() + 8)
-        progress_window.geometry(
-            f"{win_w2}x{win_h2}+{max(0,(screen_w-win_w2)//2)}+{max(0,(screen_h-win_h2)//2)}"
-        )
-        progress_window.deiconify()
-        progress_window.lift()
-        progress_window.update()
-        progress_bar2.start(10)
         # Poll until process exits (up to 15 s), keeping the UI alive.
         deadline = time.monotonic() + 15.0
         while time.monotonic() < deadline and _is_app_running():
             progress_window.update()
             time.sleep(0.25)
-        progress_bar2.stop()
         progress_window.destroy()
         if _is_app_running():
             messagebox.showerror(
                 APP_NAME,
-                "TheraTrak Pro could not be closed automatically.\n"
+                "AuraScribe could not be closed automatically.\n"
                 "Please close it manually and run the installer again.",
                 parent=root,
             )
             root.destroy()
             return 1
         # Rebuild the real progress window now that the app is gone.
-        progress_window = Toplevel(root)
-        progress_window.title(f"Installing {APP_NAME}")
-        progress_window.resizable(True, True)
-        progress_window.attributes("-topmost", True)
-        progress_window.attributes("-toolwindow", False)
-        progress_window.protocol("WM_DELETE_WINDOW", lambda: None)
-        status_var = StringVar(value="Preparing installation folders...")
-        status_label = ttk.Label(progress_window, textvariable=status_var, width=56)
-        status_label.pack(padx=16, pady=(14, 8))
-        progress_var = DoubleVar(value=0)
-        progress_bar = ttk.Progressbar(
-            progress_window,
-            orient="horizontal",
-            mode="determinate",
-            length=460,
-            maximum=100,
-            variable=progress_var,
+        progress_window, set_progress = _build_progress_window(  # type: ignore[no-redef]
+            root, screen_w, screen_h, "Preparing installation folders..."
         )
-        progress_bar.pack(padx=16, pady=(0, 14))
-        progress_window.update_idletasks()
-        win_w = max(500, progress_window.winfo_reqwidth() + 8)
-        win_h = max(120, progress_window.winfo_reqheight() + 8)
-        progress_window.geometry(
-            f"{win_w}x{win_h}+{max(0,(screen_w-win_w)//2)}+{max(0,(screen_h-win_h)//2)}"
-        )
-        progress_window.deiconify()
-        progress_window.lift()
-        progress_window.focus_force()
-        progress_window.update()
-
-        def set_progress(percent: float, status: str) -> None:  # type: ignore[no-redef]
-            progress_var.set(max(0, min(100, percent)))
-            status_var.set(status)
-            progress_window.update()
 
     set_progress(5, "Preparing installation folders...")
     target.mkdir(parents=True, exist_ok=True)
@@ -534,7 +832,7 @@ def main() -> int:
         messagebox.showerror(
             APP_NAME,
             "Install failed while copying application files.\n"
-            "Please close TheraTrak Pro and retry.\n\n"
+            "Please close AuraScribe and retry.\n\n"
             f"Details: {ex}",
         )
         root.destroy()
@@ -596,7 +894,7 @@ def main() -> int:
     create_shortcut(desktop / f"{APP_NAME}.lnk", exe_path, exe_path, target)
     create_shortcut(start_menu_dir / f"{APP_NAME}.lnk", exe_path, exe_path, target)
     create_shortcut(
-        start_menu_dir / "Uninstall TheraTrak Pro.lnk",
+        start_menu_dir / UNINSTALL_SHORTCUT_NAME,
         Path(os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe")),
         uninstaller_path,
         target,
@@ -609,7 +907,7 @@ def main() -> int:
 
     messagebox.showinfo(
         APP_NAME,
-        "TheraTrak Pro was installed successfully.\n\nDesktop and Start Menu shortcuts were created.\nAn uninstaller was also registered in Installed Apps.",
+        "AuraScribe was installed successfully.\n\nDesktop and Start Menu shortcuts were created.\nAn uninstaller was also registered in Installed Apps.",
     )
     root.destroy()
     return 0

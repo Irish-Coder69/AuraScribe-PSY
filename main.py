@@ -1,5 +1,5 @@
 """
-TheraTrak Pro
+AuraScribe
 Combined therapy practice management and CMS-1500 application.
 
 Python 3.10+  ·  Tkinter + ttk  ·  SQLite backend
@@ -101,7 +101,7 @@ STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
 
 GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Irish-Coder69/TheraTrak-Pro/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/Irish-Coder69/TheraTrak-Pro/releases/latest"
-UPDATE_TEMP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Temp" / "TheraTrakUpdates"
+UPDATE_TEMP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Temp" / "AuraScribeUpdates"
 STARTUP_LOG_FILE = APP_ROOT / "startup.log"
 CMS_TEMPLATE_FILE = APP_ROOT / "CMS1500_template.pdf"
 VOSK_MODELS_DIR = APP_ROOT / "models"
@@ -1093,7 +1093,7 @@ def _install_crash_logger():
         _append_startup_log("".join(traceback.format_exception(exc_type, exc_value, exc_tb)).rstrip())
         try:
             messagebox.showerror(
-                "TheraTrak Pro Error",
+                "AuraScribe Error",
                 "An unexpected error occurred.\n\n"
                 f"Details were written to:\n{STARTUP_LOG_FILE}"
             )
@@ -1689,7 +1689,7 @@ class LoginDialog(tk.Toplevel):
         super().__init__(parent)
         apply_window_icon(self)
         self.user = None
-        self.title("TheraTrak Pro Login")
+        self.title("AuraScribe Login")
         _w, _h = _screen_fit(max(900, SCREEN_W - 30), max(560, SCREEN_H - 90), pad=0)
         self.geometry(f"{_w}x{_h}+0+0")
         self.resizable(True, True)
@@ -1708,7 +1708,7 @@ class LoginDialog(tk.Toplevel):
         center = ttk.Frame(frm)
         center.pack(expand=True)
 
-        ttk.Label(center, text="TheraTrak Pro", font=FONT_H1).pack(anchor="center")
+        ttk.Label(center, text="AuraScribe", font=FONT_H1).pack(anchor="center")
 
         self.v_user = tk.StringVar()
         self.v_pass = tk.StringVar()
@@ -5579,13 +5579,13 @@ class SettingsTab(ttk.Frame):
                   font=FONT_LG).pack(anchor="w", pady=(0, 6))
 
         info_txt = (
-            "TheraTrak Pro accepts CSV files exported from any medical practice management\n"
+            "AuraScribe accepts CSV files exported from any medical practice management\n"
             "or EHR system (SimplePractice, Kareo, TherapyNotes, Practice Fusion, etc.).\n\n"
             "HOW TO EXPORT FROM YOUR CURRENT SOFTWARE:\n"
             "  1. Open your current software and go to its export / reports section.\n"
             "  2. Choose CSV or Excel format, then save the file.\n"
-            "  3. Use the Import buttons below to bring data into TheraTrak Pro.\n\n"
-            "TheraTrak Pro automatically maps common column names — exact header names\n"
+            "  3. Use the Import buttons below to bring data into AuraScribe.\n\n"
+            "AuraScribe automatically maps common column names — exact header names\n"
             "are not required.  For best results, download a CSV template to see the\n"
             "expected structure and rename your exported columns accordingly."
         )
@@ -7169,7 +7169,7 @@ class TheraTrakApp(tk.Tk):
         apply_window_icon(self)
         self.current_user = current_user
         self._version = vm.get_version_string()
-        self.title(f"TheraTrak Pro - {self._version}")
+        self.title(f"AuraScribe - {self._version}")
         
         # ── Cache detected dictation software at startup ──────────────────────
         self._cached_dictation_apps = []
@@ -7265,7 +7265,7 @@ class TheraTrakApp(tk.Tk):
         hdr.pack(fill="x", side="top")
         hdr.pack_propagate(False)
 
-        tk.Label(hdr, text="TheraTrak Pro", bg=HDR_BG, fg=HDR_FG,
+        tk.Label(hdr, text="AuraScribe", bg=HDR_BG, fg=HDR_FG,
                  font=("Calibri", 20, "bold")).pack(side="left", padx=16, pady=10)
         tk.Label(hdr, text="Combined Therapy & Billing", bg=HDR_BG, fg="#93c5fd",
                  font=("Calibri", 10)).pack(side="left", padx=2)
@@ -7365,14 +7365,14 @@ class TheraTrakApp(tk.Tk):
         help_menu.add_command(label="License Registration", command=self._open_license_registration)
         help_menu.add_command(label="User Guide", command=self._open_user_guide)
         help_menu.add_command(label="Display Diagnostics", command=self._show_display_diagnostics)
-        help_menu.add_command(label="About TheraTrak Pro", command=self._about)
+        help_menu.add_command(label="About AuraScribe", command=self._about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
         self.config(menu=menubar)
 
     def _update_stats(self):
         self._version = vm.get_version_string()
-        self.title(f"TheraTrak Pro - {self._version}")
+        self.title(f"AuraScribe - {self._version}")
         self._lbl_version.config(text=self._version)
         n = db.count_patients("Active")
         self._lbl_pts.config(text=f"Active Patients: {n}")
@@ -7422,7 +7422,7 @@ class TheraTrakApp(tk.Tk):
                 "Use Help > Check for Updates to view release details."
             )
 
-        messagebox.showinfo("TheraTrak Pro Updated", msg, parent=self)
+        messagebox.showinfo("AuraScribe Updated", msg, parent=self)
 
     def _open_user_directory(self):
         UserDirectoryDialog(self)
@@ -7502,7 +7502,7 @@ class TheraTrakApp(tk.Tk):
 
         win = tk.Toplevel(self)
         apply_window_icon(win)
-        win.title("TheraTrak Pro User Guide")
+        win.title("AuraScribe User Guide")
         win.geometry("980x760")
         win.minsize(760, 560)
 
@@ -7542,7 +7542,7 @@ class TheraTrakApp(tk.Tk):
         wmi_votes = live_machine_probe.get("wmi_votes") or []
 
         lines = [
-            "TheraTrak Pro Display Diagnostics",
+            "AuraScribe Display Diagnostics",
             "",
             f"Version: {self._version}",
             f"Platform: {platform.platform()}",
@@ -7614,8 +7614,8 @@ class TheraTrakApp(tk.Tk):
             who = licensed_name or licensed_email
             license_line = f"License: Registered to {who}"
         messagebox.showinfo(
-            "About TheraTrak Pro",
-            "TheraTrak Pro\n"
+            "About AuraScribe",
+            "AuraScribe\n"
             f"Version: {self._version}\n"
             f"{user_line}"
             f"{license_line}\n"
@@ -7626,7 +7626,7 @@ class TheraTrakApp(tk.Tk):
             "  - Billing ledger & payment tracking\n"
             "  - CMS-1500 fillable PDF (preview + print)\n"
             "  - Reports & CSV data export\n"
-            "  - Data migration from Notes 444 files\n\n"
+            "  - Data migration from previous software exports\n\n"
             f"Database: {db.DB_PATH}\n\n"
             "Created By: Judson M. Fitzpatrick, Irish_Codeers Programming\n"
             f"(c) {datetime.now().year} Irish_Codeers Programming. All rights reserved."
@@ -7668,7 +7668,7 @@ class TheraTrakApp(tk.Tk):
         frm = ttk.Frame(dlg, padding=12)
         frm.pack(fill="both", expand=True)
 
-        ttk.Label(frm, text="TheraTrak Pro License", font=FONT_LG).grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Label(frm, text="AuraScribe License", font=FONT_LG).grid(row=0, column=0, columnspan=3, sticky="w")
 
         status_text = "Active" if status_ok else "Not Activated"
         if not status_ok and status_msg:
@@ -7764,7 +7764,7 @@ class TheraTrakApp(tk.Tk):
         if required and not result["activated"]:
             messagebox.showwarning(
                 "License Required",
-                "A valid license key is required to continue using TheraTrak Pro.",
+                "A valid license key is required to continue using AuraScribe.",
                 parent=self,
             )
         return bool(result["activated"])
@@ -7780,7 +7780,7 @@ class TheraTrakApp(tk.Tk):
         if days_left > 0:
             if messagebox.askyesno(
                 "Trial Mode",
-                "TheraTrak Pro is running in trial mode.\n\n"
+                "AuraScribe is running in trial mode.\n\n"
                 f"Days remaining: {days_left}\n\n"
                 "Pricing:\n"
                 "  Solo Practice  —  $49 / month  (1 provider)\n"
@@ -7863,7 +7863,7 @@ class TheraTrakApp(tk.Tk):
 
         downloaded = 0
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "TheraTrak-Pro"})
+            req = urllib.request.Request(url, headers={"User-Agent": "AuraScribe-App"})
             with urllib.request.urlopen(req, timeout=60) as resp:
                 total_raw = resp.headers.get("Content-Length")
                 total = int(total_raw) if total_raw and total_raw.isdigit() else int(getattr(resp, "length", 0) or 0)
@@ -7898,12 +7898,12 @@ class TheraTrakApp(tk.Tk):
             progress_win.destroy()
 
     def _launch_installer_after_exit(self, installer_path):
-        install_dir = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Programs" / "TheraTrak Pro"
-        app_exe = install_dir / "TheraTrak Pro.exe"
+        install_dir = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Programs" / "AuraScribe"
+        app_exe = install_dir / "AuraScribe.exe"
         if not app_exe.exists() and getattr(sys, "frozen", False):
             app_exe = Path(sys.executable)
-        updater_bat = UPDATE_TEMP_DIR / "run_theratrak_update.bat"
-        log_file = Path(os.environ.get("TEMP", str(Path.home()))) / "theratrak_update.log"
+        updater_bat = UPDATE_TEMP_DIR / "run_aurascribe_update.bat"
+        log_file = Path(os.environ.get("TEMP", str(Path.home()))) / "aurascribe_update.log"
         app_pid = os.getpid()
 
         lines = [
@@ -7950,7 +7950,7 @@ class TheraTrakApp(tk.Tk):
             GITHUB_LATEST_RELEASE_API,
             headers={
                 "Accept": "application/vnd.github+json",
-                "User-Agent": "TheraTrak-Pro"
+                "User-Agent": "AuraScribe-App"
             },
         )
 
@@ -7996,7 +7996,7 @@ class TheraTrakApp(tk.Tk):
         if latest_tuple > current_tuple:
             do_update = messagebox.askyesno(
                 "Update Available",
-                "A newer version of TheraTrak Pro is available.\n\n"
+                "A newer version of AuraScribe is available.\n\n"
                 f"Current Version: {current_ver}\n"
                 f"Latest Version: {latest_display}\n\n"
                 "Download and install it now?"
@@ -8018,7 +8018,7 @@ class TheraTrakApp(tk.Tk):
                 return
 
             asset_url = installer_asset.get("browser_download_url")
-            asset_name = installer_asset.get("name") or "TheraTrak-Pro-Installer.exe"
+            asset_name = installer_asset.get("name") or "AuraScribe-Installer.exe"
             if not asset_url:
                 webbrowser.open(release_url)
                 return
@@ -8043,7 +8043,7 @@ class TheraTrakApp(tk.Tk):
             proceed = messagebox.askyesno(
                 "Ready to Install Update",
                 "The installer has been downloaded.\n\n"
-                "TheraTrak Pro will now close, install the update, and reopen automatically.\n"
+                "AuraScribe will now close, install the update, and reopen automatically.\n"
                 "Your user profiles, patient records, and billing data will be preserved."
                 f"{backup_msg}\n\n"
                 "Continue?"
@@ -8066,7 +8066,7 @@ class TheraTrakApp(tk.Tk):
         if latest_tuple == current_tuple:
             messagebox.showinfo(
                 "Check for Updates",
-                "TheraTrak Pro is up to date.\n\n"
+                "AuraScribe is up to date.\n\n"
                 f"Current Version: {current_ver}\n"
                 f"Latest Version: {latest_display}"
             )
@@ -8082,15 +8082,14 @@ class TheraTrakApp(tk.Tk):
     def _migration_help(self):
         messagebox.showinfo(
             "Data Migration Help",
-            "To migrate your existing data from Notes 444:\n\n"
-            "1. Open  H:\\Important Files\\Notes 444.EXE\n"
-            "2. Go to File → Export Records\n"
-            "3. Export each file as CSV:\n"
+            "To migrate your existing data from another system:\n\n"
+            "1. Open your current software and go to its export/report tools.\n"
+            "2. Export each dataset as CSV (or spreadsheet format, if available):\n"
             "   • Patient records → patients.csv\n"
             "   • Session notes   → sessions.csv\n"
             "   • Payments        → billing.csv\n"
-            "4. Go to Settings/Import tab in TheraTrak Pro\n"
-            "5. Use the 'Import Patients/Sessions/Billing (CSV)' buttons\n\n"
+            "3. Go to Settings/Import tab in AuraScribe\n"
+            "4. Use the 'Import Patients/Sessions/Billing (CSV)' buttons\n\n"
             "The importer is flexible with column names and will\n"
             "attempt to map fields automatically.\n\n"
             "For billing and CMS-1500, your settings are entered once\n"
@@ -8135,9 +8134,9 @@ if __name__ == "__main__":
                 pass
 
     _install_crash_logger()
-    _startup_self_check()
     try:
         db.initialize_db()
+        _startup_self_check()
         app = TheraTrakApp()
         app.withdraw()
 
