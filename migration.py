@@ -233,7 +233,10 @@ def import_sessions_csv(path: str) -> tuple[int, list[str]]:
 
         for line_num, row in enumerate(reader, start=2):
             # Resolve patient
-            pid_str = col(row, "patient id", "pt id", "id")
+            pid_str = col(row, "patient_id", "patient id", "pt_id", "pt id")
+            if not pid_str:
+                # Legacy fallback only when a specific patient id column is absent.
+                pid_str = col(row, "id")
             pid = int(pid_str) if pid_str.isdigit() else None
 
             if pid is None:
@@ -334,7 +337,10 @@ def import_billing_csv(path: str) -> tuple[int, list[str]]:
                 return 0.0
 
         for line_num, row in enumerate(reader, start=2):
-            pid_str = col(row, "patient id", "pt id", "id")
+            pid_str = col(row, "patient_id", "patient id", "pt_id", "pt id")
+            if not pid_str:
+                # Legacy fallback only when a specific patient id column is absent.
+                pid_str = col(row, "id")
             pid = int(pid_str) if pid_str.isdigit() else None
 
             if pid is None:
