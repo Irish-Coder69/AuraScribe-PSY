@@ -7602,6 +7602,9 @@ class TheraTrakApp(tk.Tk):
                 except Exception:
                     pass
 
+        if details_text and "what's changed" not in details_text.lower():
+            details_text = "## What's Changed\n" + details_text
+
         canonical_current = self._format_tag_version(current_version)
         db.set_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, canonical_current)
 
@@ -8350,14 +8353,7 @@ class TheraTrakApp(tk.Tk):
             return best_item
         return latest_payload
 
-    def _version_text_to_release_tag(self, text: str) -> str:
-        major, minor, patch, build = self._parse_version_tuple(text)
-        if (major, minor, patch, build) == (0, 0, 0, 0):
-            return ""
-        return f"v{major}.{minor}.{patch}-build{build}"
-
-    def _fetch_release_notes_for_version(self, version_text: str, timeout: int = 6):
-        tag = self._version_text_to_release_tag(version_text)
+    def _fetch_release_payload_by_tag(self, tag: str, timeout: int = 6):
         if not tag:
             return None
 
@@ -8373,7 +8369,23 @@ class TheraTrakApp(tk.Tk):
                 payload = json.loads(resp.read().decode("utf-8", errors="replace"))
             if not isinstance(payload, dict):
                 return None
+            return payload
         except Exception:
+            return None
+
+    def _version_text_to_release_tag(self, text: str) -> str:
+        major, minor, patch, build = self._parse_version_tuple(text)
+        if (major, minor, patch, build) == (0, 0, 0, 0):
+            return ""
+        return f"v{major}.{minor}.{patch}-build{build}"
+
+    def _fetch_release_notes_for_version(self, version_text: str, timeout: int = 6):
+        tag = self._version_text_to_release_tag(version_text)
+        if not tag:
+            return None
+
+        payload = self._fetch_release_payload_by_tag(tag, timeout=timeout)
+        if not payload:
             return None
 
         note_version = payload.get("tag_name") or tag
@@ -8385,7 +8397,7 @@ class TheraTrakApp(tk.Tk):
 
     def _release_notes_preview(self, notes: str, max_chars: int = 900, max_lines: int = 14) -> str:
         if not notes:
-            return "No detailed release notes were provided for this build."
+            return "## What's Changed\nNo detailed release notes were provided for this build."
 
         cleaned_lines = []
         for raw in notes.splitlines():
@@ -8402,6 +8414,9 @@ class TheraTrakApp(tk.Tk):
 
         if len(preview) > max_chars:
             preview = preview[:max_chars].rstrip() + "..."
+
+        if "what's changed" not in preview.lower():
+            preview = "## What's Changed\n" + preview
 
         return preview
 
@@ -8481,6 +8496,10 @@ class TheraTrakApp(tk.Tk):
         release_url = payload.get("html_url") or GITHUB_RELEASES_PAGE
         installer_asset = self._pick_installer_asset(payload)
         release_notes = (payload.get("body") or "").strip()
+        if (not release_notes) and latest_tag:
+            by_tag_payload = self._fetch_release_payload_by_tag(latest_tag, timeout=6)
+            if by_tag_payload:
+                release_notes = (by_tag_payload.get("body") or "").strip()
         if not release_notes:
             release_notes = "No detailed release notes were provided for this build."
         notes_preview = self._release_notes_preview(release_notes)
