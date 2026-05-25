@@ -7883,29 +7883,163 @@ class TheraTrakApp(tk.Tk):
         progress_win = tk.Toplevel(self)
         apply_window_icon(progress_win)
         progress_win.title("Downloading Update")
-        progress_win.resizable(True, True)
-        try:
-            progress_win.state("zoomed")
-        except tk.TclError:
-            pass
+        progress_win.resizable(False, False)
         progress_win.transient(self)
         progress_win.grab_set()
         progress_win.protocol("WM_DELETE_WINDOW", lambda: None)
 
-        frame = ttk.Frame(progress_win, padding=12)
-        frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="Downloading latest installer...").pack(anchor="w")
-        status_var = tk.StringVar(value="Starting download...")
-        ttk.Label(frame, textvariable=status_var).pack(anchor="w", pady=(6, 8))
+        C_GRAD_TOP = (110, 195, 232)
+        C_GRAD_BOT = (58, 140, 195)
+        C_BODY_BG = "#f5f7fa"
+        C_SUB_FG = "#556070"
+        C_BAR_BG = "#d8e8f2"
+        C_DIVIDER = "#3a8cc3"
+        C_TITLE_FG = "#1a2535"
 
-        bar = ttk.Progressbar(frame, orient="horizontal", length=380, mode="indeterminate")
-        bar.pack(fill="x")
+        screen_w = progress_win.winfo_screenwidth()
+        screen_h = progress_win.winfo_screenheight()
+        win_w = min(760, max(620, screen_w - 120))
+        header_h = 310 if screen_h >= 900 else 240
+
+        def _load_download_banner(width: int, height: int):
+            if Image is None or ImageTk is None:
+                return None
+            image_name = "Aura Scribe PSY.jpg"
+            candidates = [
+                APP_ROOT / image_name,
+                ASSETS_DIR / image_name,
+                Path.cwd() / image_name,
+            ]
+            for candidate in candidates:
+                if not candidate.exists() or not candidate.is_file():
+                    continue
+                try:
+                    with Image.open(candidate) as source:
+                        source = source.convert("RGB")
+                        if source.width <= 0 or source.height <= 0:
+                            continue
+                        scale = min(width / source.width, height / source.height)
+                        new_w = max(1, int(source.width * scale))
+                        new_h = max(1, int(source.height * scale))
+                        resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.BICUBIC)
+                        resized = source.resize((new_w, new_h), resample)
+                        canvas = Image.new("RGB", (width, height), (17, 40, 60))
+                        off_x = (width - new_w) // 2
+                        off_y = (height - new_h) // 2
+                        canvas.paste(resized, (off_x, off_y))
+                    return ImageTk.PhotoImage(canvas)
+                except Exception:
+                    continue
+            return None
+
+        progress_win.configure(bg=C_BODY_BG)
+        hdr = tk.Canvas(progress_win, width=win_w, height=header_h, highlightthickness=0)
+        hdr.pack(fill="x")
+
+        banner_photo = _load_download_banner(win_w, header_h)
+        if banner_photo is not None:
+            hdr.create_image(win_w // 2, header_h // 2, image=banner_photo, anchor="center")
+            hdr.image = banner_photo
+            hdr.create_rectangle(0, 0, win_w, header_h, outline="#3a8cc3", width=2)
+        else:
+            r0, g0, b0 = C_GRAD_TOP
+            r1, g1, b1 = C_GRAD_BOT
+            for i in range(header_h):
+                t = i / max(1, header_h - 1)
+                r = int(r0 + (r1 - r0) * t)
+                g = int(g0 + (g1 - g0) * t)
+                b = int(b0 + (b1 - b0) * t)
+                hdr.create_line(0, i, win_w, i, fill=f"#{r:02x}{g:02x}{b:02x}")
+            hdr.create_text(
+                win_w // 2,
+                header_h // 2 - 8,
+                text=APP_NAME,
+                font=("Segoe UI", 16, "bold"),
+                fill="white",
+                anchor="center",
+            )
+            hdr.create_text(
+                win_w // 2,
+                header_h // 2 + 16,
+                text="Downloading update...",
+                font=("Segoe UI", 9),
+                fill="#d6eef8",
+                anchor="center",
+            )
+
+        tk.Frame(progress_win, bg=C_DIVIDER, height=3).pack(fill="x")
+
+        body = tk.Frame(progress_win, bg=C_BODY_BG, padx=24, pady=18)
+        body.pack(fill="both", expand=True)
+
+        tk.Label(
+            body,
+            text="Downloading latest installer...",
+            font=("Segoe UI", 11, "bold"),
+            bg=C_BODY_BG,
+            fg=C_TITLE_FG,
+            anchor="w",
+        ).pack(anchor="w", pady=(0, 6))
+
+        status_var = tk.StringVar(value="Starting download...")
+        tk.Label(
+            body,
+            textvariable=status_var,
+            font=("Segoe UI", 9),
+            bg=C_BODY_BG,
+            fg=C_SUB_FG,
+            anchor="w",
+            wraplength=win_w - 48,
+        ).pack(anchor="w", pady=(0, 10))
+
+        bar_w = win_w - 48
+        bar_h = 16
+        bar_canvas = tk.Canvas(body, width=bar_w, height=bar_h, bg=C_BAR_BG, highlightthickness=0)
+        bar_canvas.pack(anchor="w")
+
+        pct_label = tk.Label(body, text="0%", font=("Segoe UI", 8), bg=C_BODY_BG, fg=C_SUB_FG, anchor="e")
+        pct_label.pack(anchor="e", pady=(3, 0))
+
+        mode = {"indeterminate": True, "active": True, "pos": -(bar_w // 3)}
+        block = bar_w // 4
+
+        def _draw_determinate(pct: float) -> None:
+            bar_canvas.delete("all")
+            bar_canvas.create_rectangle(0, 0, bar_w, bar_h, fill=C_BAR_BG, outline="")
+            filled = int(bar_w * pct / 100.0)
+            for px in range(filled):
+                t = px / max(1, bar_w - 1)
+                rr = int(110 + (58 - 110) * t)
+                gg = int(195 + (140 - 195) * t)
+                bb = int(232 + (195 - 232) * t)
+                bar_canvas.create_line(px, 0, px, bar_h, fill=f"#{rr:02x}{gg:02x}{bb:02x}")
+
+        def _animate_indeterminate() -> None:
+            if not mode["active"] or not mode["indeterminate"]:
+                return
+            bar_canvas.delete("all")
+            bar_canvas.create_rectangle(0, 0, bar_w, bar_h, fill=C_BAR_BG, outline="")
+            x = mode["pos"]
+            x1, x2 = max(0, x), min(x + block, bar_w)
+            if x1 < x2:
+                for px in range(x1, x2):
+                    t = px / max(1, bar_w - 1)
+                    rr = int(110 + (58 - 110) * t)
+                    gg = int(195 + (140 - 195) * t)
+                    bb = int(232 + (195 - 232) * t)
+                    bar_canvas.create_line(px, 0, px, bar_h, fill=f"#{rr:02x}{gg:02x}{bb:02x}")
+            mode["pos"] = x + 8
+            if mode["pos"] > bar_w:
+                mode["pos"] = -block
+            progress_win.after(25, _animate_indeterminate)
+
+        _animate_indeterminate()
 
         progress_win.update_idletasks()
-        width = max(420, progress_win.winfo_reqwidth())
-        height = max(120, progress_win.winfo_reqheight())
-        x = max(0, (progress_win.winfo_screenwidth() - width) // 2)
-        y = max(0, (progress_win.winfo_screenheight() - height) // 2)
+        width = max(win_w, progress_win.winfo_reqwidth())
+        height = progress_win.winfo_reqheight()
+        x = max(0, (screen_w - width) // 2)
+        y = max(0, (screen_h - height) // 2)
         progress_win.geometry(f"{width}x{height}+{x}+{y}")
         progress_win.update()
 
@@ -7917,9 +8051,10 @@ class TheraTrakApp(tk.Tk):
                 total = int(total_raw) if total_raw and total_raw.isdigit() else int(getattr(resp, "length", 0) or 0)
 
                 if total > 0:
-                    bar.configure(mode="determinate", maximum=total, value=0)
+                    mode["indeterminate"] = False
+                    _draw_determinate(0.0)
+                    pct_label.configure(text="0%")
                 else:
-                    bar.start(12)
                     progress_win.update()
 
                 with destination.open("wb") as out_f:
@@ -7931,18 +8066,19 @@ class TheraTrakApp(tk.Tk):
                         downloaded += len(chunk)
 
                         if total > 0:
-                            bar["value"] = downloaded
                             pct = min(100.0, (downloaded / total) * 100.0)
+                            _draw_determinate(pct)
+                            pct_label.configure(text=f"{int(pct)}%")
                             status_var.set(f"Downloaded {pct:.1f}% ({downloaded // 1024} KB of {total // 1024} KB)")
                             progress_win.title(f"Downloading Update - {pct:.1f}%")
                         else:
+                            pct_label.configure(text="...")
                             status_var.set(f"Downloaded {downloaded // 1024} KB")
                             progress_win.title(f"Downloading Update - {downloaded // 1024} KB")
 
                         progress_win.update()
         finally:
-            if bar.cget("mode") == "indeterminate":
-                bar.stop()
+            mode["active"] = False
             progress_win.destroy()
 
     def _launch_installer_after_exit(self, installer_path):

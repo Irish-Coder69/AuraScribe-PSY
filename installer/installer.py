@@ -744,13 +744,15 @@ def _build_progress_window(
     import tkinter as tk
 
     C_GRAD_TOP = (110, 195, 232)
-    C_GRAD_BOT = (58,  140, 195)
-    C_BODY_BG  = "#f5f7fa"
-    C_SUB_FG   = "#556070"
-    C_BAR_BG   = "#d8e8f2"
-    C_DIVIDER  = "#3a8cc3"
-    WIN_W      = 520
-    HEADER_H   = 62
+    C_GRAD_BOT = (58, 140, 195)
+    C_BODY_BG = "#f5f7fa"
+    C_SUB_FG = "#556070"
+    C_BAR_BG = "#d8e8f2"
+    C_DIVIDER = "#3a8cc3"
+    C_TITLE_FG = "#1a2535"
+
+    WIN_W = min(760, max(620, screen_w - 120))
+    HEADER_H = 310 if screen_h >= 900 else 240
 
     win = Toplevel(root)
     win.title(f"Installing {APP_NAME}")
@@ -761,26 +763,53 @@ def _build_progress_window(
     win.protocol("WM_DELETE_WINDOW", lambda: None)
     _apply_window_icon(win)
 
-    # Gradient header
     hdr = tk.Canvas(win, width=WIN_W, height=HEADER_H, highlightthickness=0)
     hdr.pack(fill="x")
-    r0, g0, b0 = C_GRAD_TOP
-    r1, g1, b1 = C_GRAD_BOT
-    for i in range(HEADER_H):
-        t = i / max(1, HEADER_H - 1)
-        r = int(r0 + (r1 - r0) * t)
-        g = int(g0 + (g1 - g0) * t)
-        b = int(b0 + (b1 - b0) * t)
-        hdr.create_line(0, i, WIN_W, i, fill=f"#{r:02x}{g:02x}{b:02x}")
-    hdr.create_text(WIN_W // 2, HEADER_H // 2 - 6, text=APP_NAME,
-                    font=("Segoe UI", 14, "bold"), fill="white", anchor="center")
-    hdr.create_text(WIN_W // 2, HEADER_H // 2 + 13, text="Installing, please wait…",
-                    font=("Segoe UI", 8), fill="#d6eef8", anchor="center")
+
+    banner_photo = _load_setup_wizard_banner(WIN_W, HEADER_H)
+    if banner_photo is not None:
+        hdr.create_image(WIN_W // 2, HEADER_H // 2, image=banner_photo, anchor="center")
+        hdr.image = banner_photo
+        hdr.create_rectangle(0, 0, WIN_W, HEADER_H, outline="#3a8cc3", width=2)
+    else:
+        r0, g0, b0 = C_GRAD_TOP
+        r1, g1, b1 = C_GRAD_BOT
+        for i in range(HEADER_H):
+            t = i / max(1, HEADER_H - 1)
+            r = int(r0 + (r1 - r0) * t)
+            g = int(g0 + (g1 - g0) * t)
+            b = int(b0 + (b1 - b0) * t)
+            hdr.create_line(0, i, WIN_W, i, fill=f"#{r:02x}{g:02x}{b:02x}")
+        hdr.create_text(
+            WIN_W // 2,
+            HEADER_H // 2 - 8,
+            text=APP_NAME,
+            font=("Segoe UI", 16, "bold"),
+            fill="white",
+            anchor="center",
+        )
+        hdr.create_text(
+            WIN_W // 2,
+            HEADER_H // 2 + 16,
+            text="Installing, please wait...",
+            font=("Segoe UI", 9),
+            fill="#d6eef8",
+            anchor="center",
+        )
 
     tk.Frame(win, bg=C_DIVIDER, height=3).pack(fill="x")
 
     body = tk.Frame(win, bg=C_BODY_BG, padx=24, pady=18)
     body.pack(fill="both", expand=True)
+
+    tk.Label(
+        body,
+        text=f"Installing {APP_NAME}",
+        font=("Segoe UI", 11, "bold"),
+        bg=C_BODY_BG,
+        fg=C_TITLE_FG,
+        anchor="w",
+    ).pack(anchor="w", pady=(0, 6))
 
     status_var = StringVar(value=initial_status)
     tk.Label(body, textvariable=status_var, font=("Segoe UI", 9),

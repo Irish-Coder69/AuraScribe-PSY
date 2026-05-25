@@ -154,6 +154,13 @@ $iconDest = Join-Path $distDir 'Aura Scribe PSY\Aura Scribe PSY.ico'
 Copy-Item $icon $iconDest -Force
 Write-Host "Copied Aura Scribe PSY.ico to dist."
 
+# Copy setup JPG into the app dist folder so updater dialogs can show the same artwork.
+if (Test-Path $setupWizardJpg) {
+    $setupJpgDest = Join-Path $distDir 'Aura Scribe PSY\Aura Scribe PSY.jpg'
+    Copy-Item $setupWizardJpg $setupJpgDest -Force
+    Write-Host "Copied Aura Scribe PSY.jpg to dist."
+}
+
 # Copy CMS-1500 fillable template into the app dist folder so it ships with the installer.
 $cmsTemplate = Join-Path $root 'CMS1500_template.pdf'
 $cmsTemplateDest = Join-Path $distDir 'Aura Scribe PSY\CMS1500_template.pdf'
