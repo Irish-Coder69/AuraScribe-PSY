@@ -100,10 +100,10 @@ STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
           "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
           "VA","WA","WV","WI","WY","DC"]
 
-GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases/latest"
-GITHUB_RELEASE_BY_TAG_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases/tags/{tag}"
-GITHUB_RELEASES_LIST_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases?per_page=25"
-GITHUB_RELEASES_PAGE = "https://github.com/Irish-Coder69/AuraScribe/releases/latest"
+GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe-PSY/releases/latest"
+GITHUB_RELEASE_BY_TAG_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe-PSY/releases/tags/{tag}"
+GITHUB_RELEASES_LIST_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe-PSY/releases?per_page=25"
+GITHUB_RELEASES_PAGE = "https://github.com/Irish-Coder69/AuraScribe-PSY/releases/latest"
 UPDATE_TEMP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Temp" / "AuraScribePSYUpdates"
 STARTUP_LOG_FILE = APP_ROOT / "startup.log"
 STARTUP_BANNER_FILE = "Aura Scribe PSY.jpg"
@@ -7900,7 +7900,7 @@ class TheraTrakApp(tk.Tk):
                       foreground=MUTED).grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
             def _open_purchase():
-                webbrowser.open("https://github.com/Irish-Coder69/AuraScribe/releases/latest")
+                webbrowser.open("https://github.com/Irish-Coder69/AuraScribe-PSY/releases/latest")
 
             ttk.Button(price_frm, text="Purchase License \u2192", command=_open_purchase).grid(
                 row=3, column=0, columnspan=2, sticky="w", pady=(8, 0)

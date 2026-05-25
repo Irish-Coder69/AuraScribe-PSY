@@ -123,7 +123,7 @@ try {
             gh release create $versionTag $installerExe --title $versionTitle --notes $ReleaseNotes --latest
         }
         if (-not $DryRun) {
-            Write-Host "Release published: https://github.com/Irish-Coder69/AuraScribe/releases/tag/$versionTag" -ForegroundColor Green
+            Write-Host "Release published: https://github.com/Irish-Coder69/AuraScribe-PSY/releases/tag/$versionTag" -ForegroundColor Green
         }
     }
 
