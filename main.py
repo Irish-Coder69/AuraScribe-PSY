@@ -18,6 +18,7 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import tkinter as tk
 import tkinter.font as tkFont
@@ -100,6 +101,7 @@ STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
           "VA","WA","WV","WI","WY","DC"]
 
 GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases/latest"
+GITHUB_RELEASE_BY_TAG_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases/tags/{tag}"
 GITHUB_RELEASES_PAGE = "https://github.com/Irish-Coder69/AuraScribe/releases/latest"
 UPDATE_TEMP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Temp" / "AuraScribePSYUpdates"
 STARTUP_LOG_FILE = APP_ROOT / "startup.log"
@@ -7581,6 +7583,24 @@ class TheraTrakApp(tk.Tk):
                     + "\n\n(Release notes truncated. Use Help > Check for Updates for full details.)"
                 )
 
+        # Fallback: if cached notes are missing/mismatched, fetch release notes for
+        # the installed version so users still see "what changed" after updating.
+        if not details_text and current_tuple != (0, 0, 0, 0):
+            fetched = self._fetch_release_notes_for_version(current_version, timeout=5)
+            if fetched:
+                fetched_version, fetched_notes = fetched
+                details_text = fetched_notes
+                if len(details_text) > 2400:
+                    details_text = (
+                        details_text[:2400].rstrip()
+                        + "\n\n(Release notes truncated. Use Help > Check for Updates for full details.)"
+                    )
+                try:
+                    db.set_app_preference(UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY, fetched_version)
+                    db.set_app_preference(UPDATE_ANNOUNCEMENT_NOTES_BODY_PREF_KEY, fetched_notes)
+                except Exception:
+                    pass
+
         canonical_current = self._format_tag_version(current_version)
         db.set_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, canonical_current)
 
@@ -8280,6 +8300,39 @@ class TheraTrakApp(tk.Tk):
             raise ValueError("Unexpected response from update server.")
         return payload
 
+    def _version_text_to_release_tag(self, text: str) -> str:
+        major, minor, patch, build = self._parse_version_tuple(text)
+        if (major, minor, patch, build) == (0, 0, 0, 0):
+            return ""
+        return f"v{major}.{minor}.{patch}-build{build}"
+
+    def _fetch_release_notes_for_version(self, version_text: str, timeout: int = 6):
+        tag = self._version_text_to_release_tag(version_text)
+        if not tag:
+            return None
+
+        req = urllib.request.Request(
+            GITHUB_RELEASE_BY_TAG_API.format(tag=tag),
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Aura-Scribe-PSY-App",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+            if not isinstance(payload, dict):
+                return None
+        except Exception:
+            return None
+
+        note_version = payload.get("tag_name") or tag
+        note_body = (payload.get("body") or "").strip()
+        if not note_body:
+            note_body = "No detailed release notes were provided for this build."
+
+        return self._format_tag_version(note_version), note_body
+
     def _check_for_updates_silent(self) -> str:
         current_ver = self._version
         current_tuple = self._parse_version_tuple(current_ver)
@@ -8519,14 +8572,26 @@ if __name__ == "__main__":
         app.withdraw()
 
         splash = StartupLoadingScreen(app)
-        splash.set_step(12, "Loading application components...")
-        app.update_idletasks()
-        splash.set_step(38, "Preparing secure sign-in...")
-        app.update_idletasks()
-        splash.set_step(62, "Checking for updates...")
+        splash_started = time.perf_counter()
+
+        def _splash_step(percent: float, message: str, pause_seconds: float = 0.35) -> None:
+            splash.set_step(percent, message)
+            app.update_idletasks()
+            if pause_seconds > 0:
+                time.sleep(pause_seconds)
+
+        _splash_step(12, "Loading application components...")
+        _splash_step(38, "Preparing secure sign-in...")
+        _splash_step(62, "Checking for updates...", pause_seconds=0.25)
         startup_update_msg = app._check_for_updates_silent()
-        splash.set_step(86, startup_update_msg)
-        splash.set_step(100, "Opening sign-in...")
+        _splash_step(86, startup_update_msg)
+        _splash_step(100, "Opening sign-in...", pause_seconds=0.15)
+
+        min_visible_seconds = 1.8
+        elapsed = time.perf_counter() - splash_started
+        if elapsed < min_visible_seconds:
+            time.sleep(min_visible_seconds - elapsed)
+
         splash.close()
 
         login = LoginDialog(app)
