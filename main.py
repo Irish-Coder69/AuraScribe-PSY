@@ -8453,26 +8453,41 @@ class TheraTrakApp(tk.Tk):
         self._startup_update_available = False
         self._startup_latest_version = ""
 
-        try:
-            payload = self._fetch_best_release_payload(timeout=6)
-        except urllib.error.HTTPError as ex:
-            if ex.code == 404:
-                msg = "No public release found on update server."
-            else:
-                msg = f"Update server returned HTTP {ex.code}."
-            self._startup_update_message = msg
-            _append_startup_log(f"Startup update check: {msg}")
-            return msg
-        except Exception as ex:
+        payload = None
+        last_error = None
+        for timeout in (6, 12):
+            try:
+                _append_startup_log(
+                    f"Startup update check: contacting GitHub releases API (timeout={timeout}s)"
+                )
+                payload = self._fetch_best_release_payload(timeout=timeout)
+                break
+            except urllib.error.HTTPError as ex:
+                if ex.code == 404:
+                    msg = "No public release found on update server."
+                    self._startup_update_message = msg
+                    _append_startup_log(f"Startup update check: {msg}")
+                    return msg
+                last_error = ex
+            except Exception as ex:
+                last_error = ex
+
+        if payload is None:
             msg = "Update check skipped (offline/server unavailable)."
             self._startup_update_message = msg
-            _append_startup_log(f"Startup update check failed: {ex}")
+            if last_error is not None:
+                _append_startup_log(f"Startup update check failed: {last_error}")
+            else:
+                _append_startup_log("Startup update check failed: unknown error")
             return msg
 
         latest_tag = payload.get("tag_name") or payload.get("name") or ""
         latest_tuple = self._parse_version_tuple(latest_tag)
         latest_display = self._format_tag_version(latest_tag) if latest_tag else "Unknown"
         self._startup_latest_version = latest_display
+        _append_startup_log(
+            f"Startup update check: GitHub latest selected tag={latest_tag or 'unknown'}"
+        )
 
         if latest_tuple > current_tuple:
             self._startup_update_available = True
