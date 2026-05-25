@@ -103,6 +103,7 @@ GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Irish-Coder69/AuraScri
 GITHUB_RELEASES_PAGE = "https://github.com/Irish-Coder69/AuraScribe/releases/latest"
 UPDATE_TEMP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Temp" / "AuraScribePSYUpdates"
 STARTUP_LOG_FILE = APP_ROOT / "startup.log"
+STARTUP_BANNER_FILE = "Aura Scribe PSY.jpg"
 CMS_TEMPLATE_FILE = APP_ROOT / "CMS1500_template.pdf"
 VOSK_MODELS_DIR = APP_ROOT / "models"
 CMS_BACK_TEMPLATE_CANDIDATES = (
@@ -1237,6 +1238,131 @@ def apply_window_icon(window):
         # to survive all tkinter state changes (state(), transient(), grab_set(), etc).
         for delay_ms in [10, 50, 150, 300, 600]:
             window.after(delay_ms, _restore_and_schedule)
+
+
+def _load_startup_banner_image(width: int, height: int):
+    if Image is None or ImageTk is None:
+        return None
+
+    candidates = [
+        APP_ROOT / STARTUP_BANNER_FILE,
+        ASSETS_DIR / STARTUP_BANNER_FILE,
+        Path.cwd() / STARTUP_BANNER_FILE,
+        Path.home() / "Pictures" / "Aura Scribe PSY" / STARTUP_BANNER_FILE,
+    ]
+
+    for candidate in candidates:
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            with Image.open(candidate) as source:
+                source = source.convert("RGB")
+                if source.width <= 0 or source.height <= 0:
+                    continue
+                scale = min(width / source.width, height / source.height)
+                new_w = max(1, int(source.width * scale))
+                new_h = max(1, int(source.height * scale))
+                resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.BICUBIC)
+                resized = source.resize((new_w, new_h), resample)
+                canvas = Image.new("RGB", (width, height), (17, 40, 60))
+                off_x = (width - new_w) // 2
+                off_y = (height - new_h) // 2
+                canvas.paste(resized, (off_x, off_y))
+            return ImageTk.PhotoImage(canvas)
+        except Exception:
+            continue
+
+    return None
+
+
+class StartupLoadingScreen(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        apply_window_icon(self)
+        self.title("Aura Scribe PSY")
+        self.resizable(False, False)
+        self.configure(bg="#f5f7fa")
+        self.attributes("-topmost", True)
+        self.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        self._win_w = min(740, max(560, screen_w - 160))
+        self._header_h = 300 if screen_h >= 900 else 220
+
+        hdr = tk.Canvas(self, width=self._win_w, height=self._header_h, highlightthickness=0)
+        hdr.pack(fill="x")
+        banner_photo = _load_startup_banner_image(self._win_w, self._header_h)
+        if banner_photo is not None:
+            hdr.create_image(self._win_w // 2, self._header_h // 2, image=banner_photo, anchor="center")
+            hdr.image = banner_photo
+            hdr.create_rectangle(0, 0, self._win_w, self._header_h, outline="#3a8cc3", width=2)
+        else:
+            c_top = (110, 195, 232)
+            c_bot = (58, 140, 195)
+            for i in range(self._header_h):
+                t = i / max(1, self._header_h - 1)
+                r = int(c_top[0] + (c_bot[0] - c_top[0]) * t)
+                g = int(c_top[1] + (c_bot[1] - c_top[1]) * t)
+                b = int(c_top[2] + (c_bot[2] - c_top[2]) * t)
+                hdr.create_line(0, i, self._win_w, i, fill=f"#{r:02x}{g:02x}{b:02x}")
+            hdr.create_text(
+                self._win_w // 2,
+                self._header_h // 2 - 8,
+                text="Aura Scribe PSY",
+                font=("Segoe UI", 18, "bold"),
+                fill="white",
+                anchor="center",
+            )
+            hdr.create_text(
+                self._win_w // 2,
+                self._header_h // 2 + 16,
+                text="Loading...",
+                font=("Segoe UI", 10),
+                fill="#d6eef8",
+                anchor="center",
+            )
+
+        tk.Frame(self, bg="#3a8cc3", height=3).pack(fill="x")
+
+        body = tk.Frame(self, bg="#f5f7fa", padx=22, pady=16)
+        body.pack(fill="both", expand=True)
+
+        self._status_var = tk.StringVar(value="Starting Aura Scribe PSY...")
+        tk.Label(
+            body,
+            textvariable=self._status_var,
+            font=("Segoe UI", 10),
+            bg="#f5f7fa",
+            fg="#1a2535",
+            anchor="w",
+            wraplength=self._win_w - 44,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 8))
+
+        self._progress = ttk.Progressbar(body, orient="horizontal", mode="determinate", maximum=100)
+        self._progress.pack(fill="x")
+
+        self.update_idletasks()
+        width = max(self._win_w, self.winfo_reqwidth())
+        height = self.winfo_reqheight()
+        x = max(0, (screen_w - width) // 2)
+        y = max(0, (screen_h - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.update()
+
+    def set_step(self, percent: float, status: str) -> None:
+        pct = max(0.0, min(100.0, percent))
+        self._progress.configure(value=pct)
+        self._status_var.set(status)
+        self.update_idletasks()
+        self.update()
+
+    def close(self) -> None:
+        if self.winfo_exists():
+            self.destroy()
 
 class UserDirectoryDialog(tk.Toplevel):
     def __init__(self, parent):
@@ -7212,6 +7338,7 @@ class TheraTrakApp(tk.Tk):
         apply_window_icon(self)
         self.current_user = current_user
         self._version = vm.get_version_string()
+        self._startup_update_message = ""
         self.title(f"Aura Scribe PSY - {self._version}")
         
         # ── Cache detected dictation software at startup ──────────────────────
@@ -8135,22 +8262,62 @@ class TheraTrakApp(tk.Tk):
                 f"An unexpected error occurred while checking for updates:\n\n{ex}"
             )
 
-    def _check_for_updates_impl(self):
-        current_ver = self._version
-        current_tuple = self._parse_version_tuple(current_ver)
-
+    def _fetch_latest_release_payload(self, timeout: int = 8) -> dict:
         req = urllib.request.Request(
             GITHUB_LATEST_RELEASE_API,
             headers={
                 "Accept": "application/vnd.github+json",
-                "User-Agent": "Aura-Scribe-PSY-App"
+                "User-Agent": "Aura-Scribe-PSY-App",
             },
         )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+        if not isinstance(payload, dict):
+            raise ValueError("Unexpected response from update server.")
+        return payload
+
+    def _check_for_updates_silent(self) -> str:
+        current_ver = self._version
+        current_tuple = self._parse_version_tuple(current_ver)
+
+        try:
+            payload = self._fetch_latest_release_payload(timeout=6)
+        except urllib.error.HTTPError as ex:
+            if ex.code == 404:
+                msg = "No public release found on update server."
+            else:
+                msg = f"Update server returned HTTP {ex.code}."
+            self._startup_update_message = msg
+            _append_startup_log(f"Startup update check: {msg}")
+            return msg
+        except Exception as ex:
+            msg = "Update check skipped (offline/server unavailable)."
+            self._startup_update_message = msg
+            _append_startup_log(f"Startup update check failed: {ex}")
+            return msg
+
+        latest_tag = payload.get("tag_name") or payload.get("name") or ""
+        latest_tuple = self._parse_version_tuple(latest_tag)
+        latest_display = self._format_tag_version(latest_tag) if latest_tag else "Unknown"
+
+        if latest_tuple > current_tuple:
+            msg = f"Update available: {latest_display} (Help > Check for Updates)"
+        elif latest_tuple == current_tuple:
+            msg = f"Up to date: {latest_display}"
+        else:
+            msg = f"Running newer build than latest public release ({latest_display})."
+
+        self._startup_update_message = msg
+        _append_startup_log(f"Startup update check: {msg}")
+        return msg
+
+    def _check_for_updates_impl(self):
+        current_ver = self._version
+        current_tuple = self._parse_version_tuple(current_ver)
 
         payload = None
         try:
-            with urllib.request.urlopen(req, timeout=8) as resp:
-                payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+            payload = self._fetch_latest_release_payload(timeout=8)
         except urllib.error.HTTPError as ex:
             if ex.code == 404:
                 messagebox.showinfo(
@@ -8342,6 +8509,17 @@ if __name__ == "__main__":
         app = TheraTrakApp()
         app.withdraw()
 
+        splash = StartupLoadingScreen(app)
+        splash.set_step(12, "Loading application components...")
+        app.update_idletasks()
+        splash.set_step(38, "Preparing secure sign-in...")
+        app.update_idletasks()
+        splash.set_step(62, "Checking for updates...")
+        startup_update_msg = app._check_for_updates_silent()
+        splash.set_step(86, startup_update_msg)
+        splash.set_step(100, "Opening sign-in...")
+        splash.close()
+
         login = LoginDialog(app)
         app.wait_window(login)
 
@@ -8355,6 +8533,8 @@ if __name__ == "__main__":
             app.deiconify()
             app.show_post_update_announcement_if_needed()
             app.update_idletasks()
+            if app._startup_update_message:
+                app._status_lbl.config(text=app._startup_update_message)
             try:
                 app.state("zoomed")
             except tk.TclError:
