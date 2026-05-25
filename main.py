@@ -102,6 +102,7 @@ STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
 
 GITHUB_LATEST_RELEASE_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases/latest"
 GITHUB_RELEASE_BY_TAG_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases/tags/{tag}"
+GITHUB_RELEASES_LIST_API = "https://api.github.com/repos/Irish-Coder69/AuraScribe/releases?per_page=25"
 GITHUB_RELEASES_PAGE = "https://github.com/Irish-Coder69/AuraScribe/releases/latest"
 UPDATE_TEMP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Temp" / "AuraScribePSYUpdates"
 STARTUP_LOG_FILE = APP_ROOT / "startup.log"
@@ -8300,6 +8301,55 @@ class TheraTrakApp(tk.Tk):
             raise ValueError("Unexpected response from update server.")
         return payload
 
+    def _fetch_best_release_payload(self, timeout: int = 8) -> dict:
+        """Return the most reliable latest published release payload.
+
+        Uses /releases/latest first, then cross-checks /releases list and picks
+        the highest non-draft, non-prerelease version to avoid transient API lag.
+        """
+        latest_payload = self._fetch_latest_release_payload(timeout=timeout)
+
+        req = urllib.request.Request(
+            GITHUB_RELEASES_LIST_API,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Aura-Scribe-PSY-App",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                items = json.loads(resp.read().decode("utf-8", errors="replace"))
+            if not isinstance(items, list):
+                return latest_payload
+        except Exception:
+            return latest_payload
+
+        published = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if item.get("draft") or item.get("prerelease"):
+                continue
+            tag = item.get("tag_name") or item.get("name") or ""
+            ver = self._parse_version_tuple(str(tag))
+            if ver == (0, 0, 0, 0):
+                continue
+            published.append((ver, item))
+
+        if not published:
+            return latest_payload
+
+        best_item = max(published, key=lambda pair: pair[0])[1]
+        latest_tag = latest_payload.get("tag_name") or latest_payload.get("name") or ""
+        latest_ver = self._parse_version_tuple(str(latest_tag))
+        best_tag = best_item.get("tag_name") or best_item.get("name") or ""
+        best_ver = self._parse_version_tuple(str(best_tag))
+
+        if best_ver > latest_ver:
+            return best_item
+        return latest_payload
+
     def _version_text_to_release_tag(self, text: str) -> str:
         major, minor, patch, build = self._parse_version_tuple(text)
         if (major, minor, patch, build) == (0, 0, 0, 0):
@@ -8333,12 +8383,34 @@ class TheraTrakApp(tk.Tk):
 
         return self._format_tag_version(note_version), note_body
 
+    def _release_notes_preview(self, notes: str, max_chars: int = 900, max_lines: int = 14) -> str:
+        if not notes:
+            return "No detailed release notes were provided for this build."
+
+        cleaned_lines = []
+        for raw in notes.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            cleaned_lines.append(line)
+            if len(cleaned_lines) >= max_lines:
+                break
+
+        preview = "\n".join(cleaned_lines).strip()
+        if not preview:
+            preview = notes.strip()
+
+        if len(preview) > max_chars:
+            preview = preview[:max_chars].rstrip() + "..."
+
+        return preview
+
     def _check_for_updates_silent(self) -> str:
         current_ver = self._version
         current_tuple = self._parse_version_tuple(current_ver)
 
         try:
-            payload = self._fetch_latest_release_payload(timeout=6)
+            payload = self._fetch_best_release_payload(timeout=6)
         except urllib.error.HTTPError as ex:
             if ex.code == 404:
                 msg = "No public release found on update server."
@@ -8374,7 +8446,7 @@ class TheraTrakApp(tk.Tk):
 
         payload = None
         try:
-            payload = self._fetch_latest_release_payload(timeout=8)
+            payload = self._fetch_best_release_payload(timeout=8)
         except urllib.error.HTTPError as ex:
             if ex.code == 404:
                 messagebox.showinfo(
@@ -8411,6 +8483,7 @@ class TheraTrakApp(tk.Tk):
         release_notes = (payload.get("body") or "").strip()
         if not release_notes:
             release_notes = "No detailed release notes were provided for this build."
+        notes_preview = self._release_notes_preview(release_notes)
 
         if latest_tuple > current_tuple:
             do_update = messagebox.askyesno(
@@ -8418,6 +8491,8 @@ class TheraTrakApp(tk.Tk):
                 "A newer version of Aura Scribe PSY is available.\n\n"
                 f"Current Version: {current_ver}\n"
                 f"Latest Version: {latest_display}\n\n"
+                "What's Changed (preview):\n"
+                f"{notes_preview}\n\n"
                 "Download and install it now?"
             )
             if not do_update:
@@ -8477,6 +8552,8 @@ class TheraTrakApp(tk.Tk):
                 "Aura Scribe PSY will now close, install the update, and reopen automatically.\n"
                 "Your user profiles, patient records, and billing data will be preserved."
                 f"{backup_msg}\n\n"
+                "What's Changed (preview):\n"
+                f"{notes_preview}\n\n"
                 "Continue?"
             )
             if not proceed:
