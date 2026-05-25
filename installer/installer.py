@@ -16,11 +16,16 @@ from tkinter import DoubleVar, Tk, Toplevel, StringVar, filedialog, messagebox, 
 APP_NAME = "Aura Scribe PSY"
 APP_EXE = "Aura Scribe PSY.exe"
 UNINSTALL_EXE = "Aura Scribe PSY Uninstaller.exe"
+LEGACY_APP_DIR_NAMES = ("AuraScribe",)
+LEGACY_APP_EXE_NAMES = ("AuraScribe.exe",)
 APP_BUNDLE_DIR = "app"
 UNINSTALL_CMD = "Uninstall Aura Scribe PSY.cmd"
 UNINSTALL_SHORTCUT_NAME = "Uninstall Aura Scribe PSY.lnk"
 ICON_FILE = "Aura Scribe PSY.ico"
 VERSION_FILE = "version.json"
+DB_FILE_NAME = "theratrak.db"
+UNINSTALL_KEY_CURRENT = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Aura Scribe PSY"
+UNINSTALL_KEY_LEGACY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraScribe"
 LEGACY_START_MENU_FOLDERS = ("Thorough Track Pro", "TheraTrak-Pro")
 LEGACY_ROOT_SHORTCUTS = ("TheraTrak Pro.lnk", "Uninstall TheraTrak Pro.lnk")
 
@@ -42,30 +47,35 @@ def _find_bundled_python_dll(app_bundle_dir: Path) -> Path | None:
 
 def _is_app_running() -> bool:
     """Return True if the packaged app executable is currently running."""
+    exe_names = (APP_EXE, *LEGACY_APP_EXE_NAMES)
     try:
-        result = subprocess.run(
-            ["tasklist", "/FI", f"IMAGENAME eq {APP_EXE}", "/NH", "/FO", "CSV"],
-            capture_output=True,
-            text=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        return APP_EXE.lower() in result.stdout.lower()
+        for exe_name in exe_names:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH", "/FO", "CSV"],
+                capture_output=True,
+                text=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if exe_name.lower() in result.stdout.lower():
+                return True
+        return False
     except OSError:
         return False
 
 
 def _stop_running_app() -> None:
     # Best-effort stop so install can replace locked binaries.
-    try:
-        subprocess.run(
-            ["taskkill", "/IM", APP_EXE, "/F"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except OSError:
-        pass
+    for exe_name in (APP_EXE, *LEGACY_APP_EXE_NAMES):
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", exe_name, "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except OSError:
+            pass
 
 
 def _wait_for_app_exit(timeout: float = 10.0) -> bool:
@@ -153,10 +163,15 @@ def _copy_app_bundle_with_progress(
                 for dirname in dirnames:
                     (dst_item / rel_root / dirname).mkdir(parents=True, exist_ok=True)
                 for filename in filenames:
+                    if filename.lower() == DB_FILE_NAME:
+                        # Never overwrite user data from installer payload.
+                        continue
                     src_file = root_path / filename
                     dst_file = dst_item / rel_root / filename
                     file_pairs.append((src_file, dst_file))
         else:
+            if item.name.lower() == DB_FILE_NAME:
+                continue
             file_pairs.append((item, dst_item))
 
     total_files = max(1, len(file_pairs))
@@ -177,6 +192,76 @@ def install_dir() -> Path:
     return Path(os.environ["LOCALAPPDATA"]) / "Programs" / APP_NAME
 
 
+def _candidate_install_dirs() -> list[Path]:
+    base = Path(os.environ["LOCALAPPDATA"]) / "Programs"
+    names = [APP_NAME, *LEGACY_APP_DIR_NAMES]
+    seen: set[str] = set()
+    out: list[Path] = []
+    for name in names:
+        p = base / name
+        key = str(p).lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+    return out
+
+
+def _read_install_location_from_registry(key_path: str) -> Path | None:
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, key_path) as key:
+                value, _ = winreg.QueryValueEx(key, "InstallLocation")
+            location = Path(str(value)).expanduser()
+            if location.exists() and location.is_dir():
+                return location
+        except (FileNotFoundError, PermissionError, OSError, ValueError, TypeError):
+            continue
+    return None
+
+
+def detect_existing_install_dir() -> Path | None:
+    for key_path in (UNINSTALL_KEY_CURRENT, UNINSTALL_KEY_LEGACY):
+        from_reg = _read_install_location_from_registry(key_path)
+        if from_reg is not None:
+            return from_reg
+
+    for candidate in _candidate_install_dirs():
+        if (candidate / APP_EXE).exists():
+            return candidate
+        for legacy_exe in LEGACY_APP_EXE_NAMES:
+            if (candidate / legacy_exe).exists():
+                return candidate
+    return None
+
+
+def _migrate_legacy_database(target: Path) -> Path | None:
+    """Copy existing user DB from legacy install folders if target has no DB yet."""
+    target_db = target / DB_FILE_NAME
+    if target_db.exists():
+        return None
+
+    target_resolved = target.resolve()
+    candidates: list[Path] = []
+    for install_path in _candidate_install_dirs():
+        try:
+            same_path = install_path.resolve() == target_resolved
+        except OSError:
+            same_path = False
+        if same_path:
+            continue
+        db_path = install_path / DB_FILE_NAME
+        if db_path.exists() and db_path.is_file():
+            candidates.append(db_path)
+
+    if not candidates:
+        return None
+
+    source_db = max(candidates, key=lambda p: p.stat().st_mtime)
+    target_db.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_db, target_db)
+    return source_db
+
+
 def _can_write_to_dir(path: Path) -> bool:
     try:
         path.mkdir(parents=True, exist_ok=True)
@@ -186,6 +271,15 @@ def _can_write_to_dir(path: Path) -> bool:
         return True
     except OSError:
         return False
+
+
+def _apply_window_icon(window, icon_candidate: Path | None = None) -> None:
+    icon_path = icon_candidate or (bundled_dir() / ICON_FILE)
+    if icon_path.exists():
+        try:
+            window.iconbitmap(default=str(icon_path))
+        except Exception:
+            pass
 
 
 def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
@@ -221,12 +315,13 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
     HEADER_H = 122
 
     dialog = Toplevel(root)
-    dialog.title(f"Install {APP_NAME}")
+    dialog.title(f"{APP_NAME} Setup Wizard")
     dialog.resizable(False, False)
     dialog.configure(bg=C_BODY_BG)
     dialog.attributes("-topmost", True)
     dialog.grab_set()
     dialog.minsize(DIALOG_W, 1)
+    _apply_window_icon(dialog)
 
     # ── Header canvas: gradient + "A-with-waveform" logo ────────────────────
     hdr = tk.Canvas(dialog, width=DIALOG_W, height=HEADER_H, highlightthickness=0)
@@ -495,12 +590,16 @@ def create_shortcut(
     if shortcut_path.exists():
         shortcut_path.unlink()
 
+    icon_location = _ps_quote(icon_path)
+    if icon_path.suffix.lower() != ".ico":
+        icon_location = f"{icon_location},0"
+
     ps = f"""
 $wsh = New-Object -ComObject WScript.Shell
 $shortcut = $wsh.CreateShortcut('{_ps_quote(shortcut_path)}')
 $shortcut.TargetPath = '{_ps_quote(target_path)}'
 $shortcut.WorkingDirectory = '{_ps_quote(working_dir)}'
-$shortcut.IconLocation = '{_ps_quote(icon_path)},0'
+$shortcut.IconLocation = '{icon_location}'
 $shortcut.Arguments = '{arguments.replace("'", "''")}'
 $shortcut.Description = '{APP_NAME}'
 $shortcut.Save()
@@ -568,8 +667,9 @@ def write_uninstall_cmd(target: Path) -> Path:
 
 
 def write_uninstall_registry(target: Path, uninstall_cmd: Path, version: str) -> None:
-    uninstall_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Aura Scribe PSY"
+    uninstall_path = UNINSTALL_KEY_CURRENT
     app_exe = target / APP_EXE
+    app_icon = target / ICON_FILE
     comspec = Path(os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe"))
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, uninstall_path)
     try:
@@ -577,7 +677,13 @@ def write_uninstall_registry(target: Path, uninstall_cmd: Path, version: str) ->
         winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version)
         winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Aura Scribe PSY")
         winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(target))
-        winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, str(app_exe))
+        winreg.SetValueEx(
+            key,
+            "DisplayIcon",
+            0,
+            winreg.REG_SZ,
+            str(app_icon if app_icon.exists() else app_exe),
+        )
         winreg.SetValueEx(
             key,
             "UninstallString",
@@ -617,6 +723,7 @@ def _build_progress_window(
     win.attributes("-topmost", True)
     win.attributes("-toolwindow", False)
     win.protocol("WM_DELETE_WINDOW", lambda: None)
+    _apply_window_icon(win)
 
     # Gradient header
     hdr = tk.Canvas(win, width=WIN_W, height=HEADER_H, highlightthickness=0)
@@ -746,7 +853,8 @@ def main() -> int:
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
 
-    target = choose_install_dir(root, install_dir())
+    default_target = detect_existing_install_dir() or install_dir()
+    target = choose_install_dir(root, default_target)
     if target is None:
         messagebox.showinfo(APP_NAME, "Installation canceled.", parent=root)
         root.destroy()
@@ -844,6 +952,11 @@ def main() -> int:
         if src.exists():
             _copy_with_retries(src, target / name)
 
+    set_progress(68, "Checking existing data...")
+    migrated_from = _migrate_legacy_database(target)
+    if migrated_from is not None:
+        set_progress(70, f"Migrated existing data from: {migrated_from.parent.name}")
+
     exe_path = target / APP_EXE
     uninstaller_path = target / UNINSTALL_EXE
     icon_path = target / ICON_FILE
@@ -891,8 +1004,8 @@ def main() -> int:
     start_menu_dir.mkdir(parents=True, exist_ok=True)
 
     set_progress(90, "Creating desktop and Start Menu shortcuts...")
-    create_shortcut(desktop / f"{APP_NAME}.lnk", exe_path, exe_path, target)
-    create_shortcut(start_menu_dir / f"{APP_NAME}.lnk", exe_path, exe_path, target)
+    create_shortcut(desktop / f"{APP_NAME}.lnk", exe_path, icon_path, target)
+    create_shortcut(start_menu_dir / f"{APP_NAME}.lnk", exe_path, icon_path, target)
     create_shortcut(
         start_menu_dir / UNINSTALL_SHORTCUT_NAME,
         Path(os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe")),
