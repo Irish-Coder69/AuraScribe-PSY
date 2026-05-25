@@ -7342,6 +7342,8 @@ class TheraTrakApp(tk.Tk):
         self.current_user = current_user
         self._version = vm.get_version_string()
         self._startup_update_message = ""
+        self._startup_update_available = False
+        self._startup_latest_version = ""
         self.title(f"Aura Scribe PSY - {self._version}")
         
         # ── Cache detected dictation software at startup ──────────────────────
@@ -8423,6 +8425,8 @@ class TheraTrakApp(tk.Tk):
     def _check_for_updates_silent(self) -> str:
         current_ver = self._version
         current_tuple = self._parse_version_tuple(current_ver)
+        self._startup_update_available = False
+        self._startup_latest_version = ""
 
         try:
             payload = self._fetch_best_release_payload(timeout=6)
@@ -8443,9 +8447,14 @@ class TheraTrakApp(tk.Tk):
         latest_tag = payload.get("tag_name") or payload.get("name") or ""
         latest_tuple = self._parse_version_tuple(latest_tag)
         latest_display = self._format_tag_version(latest_tag) if latest_tag else "Unknown"
+        self._startup_latest_version = latest_display
 
         if latest_tuple > current_tuple:
-            msg = f"Update available: {latest_display} (Help > Check for Updates)"
+            self._startup_update_available = True
+            msg = (
+                f"Update available on GitHub: {latest_display} "
+                f"(current: {current_ver})"
+            )
         elif latest_tuple == current_tuple:
             msg = f"Up to date: {latest_display}"
         else:
@@ -8454,6 +8463,23 @@ class TheraTrakApp(tk.Tk):
         self._startup_update_message = msg
         _append_startup_log(f"Startup update check: {msg}")
         return msg
+
+    def _notify_startup_update_if_available(self) -> None:
+        if not self._startup_update_available:
+            return
+
+        latest = self._startup_latest_version or "Unknown"
+        current = self._version or vm.get_version_string()
+        open_now = messagebox.askyesno(
+            "Update Available",
+            "A new version was found during startup update check.\n\n"
+            f"Current Version: {current}\n"
+            f"Latest Version: {latest}\n\n"
+            "Open update workflow now?",
+            parent=self,
+        )
+        if open_now:
+            self._check_for_updates()
 
     def _check_for_updates_impl(self):
         current_ver = self._version
@@ -8670,7 +8696,7 @@ if __name__ == "__main__":
         splash = StartupLoadingScreen(app)
         splash_started = time.perf_counter()
 
-        def _splash_step(percent: float, message: str, pause_seconds: float = 0.35) -> None:
+        def _splash_step(percent: float, message: str, pause_seconds: float = 0.55) -> None:
             splash.set_step(percent, message)
             app.update_idletasks()
             if pause_seconds > 0:
@@ -8678,12 +8704,12 @@ if __name__ == "__main__":
 
         _splash_step(12, "Loading application components...")
         _splash_step(38, "Preparing secure sign-in...")
-        _splash_step(62, "Checking for updates...", pause_seconds=0.25)
+        _splash_step(62, "Checking GitHub for updates...", pause_seconds=0.45)
         startup_update_msg = app._check_for_updates_silent()
-        _splash_step(86, startup_update_msg)
-        _splash_step(100, "Opening sign-in...", pause_seconds=0.15)
+        _splash_step(86, startup_update_msg, pause_seconds=0.55)
+        _splash_step(100, "Opening sign-in...", pause_seconds=0.35)
 
-        min_visible_seconds = 1.8
+        min_visible_seconds = 3.2
         elapsed = time.perf_counter() - splash_started
         if elapsed < min_visible_seconds:
             time.sleep(min_visible_seconds - elapsed)
@@ -8705,6 +8731,7 @@ if __name__ == "__main__":
             app.update_idletasks()
             if app._startup_update_message:
                 app._status_lbl.config(text=app._startup_update_message)
+            app._notify_startup_update_if_available()
             try:
                 app.state("zoomed")
             except tk.TclError:
