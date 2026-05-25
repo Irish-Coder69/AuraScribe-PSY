@@ -306,10 +306,12 @@ def _load_setup_wizard_banner(width: int, height: int):
             with Image.open(candidate) as source:
                 source = source.convert("RGB")
                 fit_mode = getattr(Image, "Resampling", Image).LANCZOS
-                rendered = ImageOps.fit(
+                # Keep the full artwork visible and pad to the banner size.
+                rendered = ImageOps.pad(
                     source,
                     (width, height),
                     method=fit_mode,
+                    color=(17, 40, 60),
                     centering=(0.5, 0.5),
                 )
             return ImageTk.PhotoImage(rendered)
@@ -347,8 +349,10 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
     FONT_BTN    = ("Segoe UI", 10, "bold")
     FONT_BROWSE = ("Segoe UI", 9)
 
-    DIALOG_W = 580
-    HEADER_H = 122
+    screen_w = root.winfo_screenwidth()
+    screen_h = root.winfo_screenheight()
+    DIALOG_W = min(760, max(620, screen_w - 120))
+    HEADER_H = 310 if screen_h >= 900 else 240
 
     dialog = Toplevel(root)
     dialog.title(f"{APP_NAME} Setup Wizard")
@@ -367,15 +371,7 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
     if banner_photo is not None:
         hdr.create_image(DIALOG_W // 2, HEADER_H // 2, image=banner_photo, anchor="center")
         hdr.image = banner_photo
-        hdr.create_rectangle(0, HEADER_H - 36, DIALOG_W, HEADER_H, fill="#11283c", outline="")
-        hdr.create_text(
-            DIALOG_W // 2,
-            HEADER_H - 20,
-            text="Setup Wizard",
-            font=FONT_SUB,
-            fill="#d6eef8",
-            anchor="center",
-        )
+        hdr.create_rectangle(0, 0, DIALOG_W, HEADER_H, outline="#3a8cc3", width=2)
     else:
         # Gradient fill
         r0, g0, b0 = C_GRAD_TOP
