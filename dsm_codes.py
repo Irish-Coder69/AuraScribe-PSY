@@ -1,5 +1,5 @@
 """
-DSM-5 / ICD-10 mental health diagnostic codes for AuraScribe.
+DSM-5 / ICD-10 mental health diagnostic codes for Aura Scribe PSY.
 Format: (code, description, category)
 """
 

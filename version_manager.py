@@ -1,5 +1,5 @@
 """
-AuraScribe version manager.
+Aura Scribe PSY version manager.
 Stores semantic version and build metadata in version.json.
 """
 

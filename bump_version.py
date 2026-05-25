@@ -1,11 +1,11 @@
-"""CLI helper to bump or set AuraScribe version."""
+"""CLI helper to bump or set Aura Scribe PSY version."""
 
 import argparse
 import version_manager as vm
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AuraScribe version manager")
+    parser = argparse.ArgumentParser(description="Aura Scribe PSY version manager")
     parser.add_argument(
         "action",
         nargs="?",

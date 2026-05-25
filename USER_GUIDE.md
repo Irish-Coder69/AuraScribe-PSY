@@ -1,10 +1,10 @@
-# AuraScribe User Guide
+# Aura Scribe PSY User Guide
 
-This guide covers the main workflow for AuraScribe.
+This guide covers the main workflow for Aura Scribe PSY.
 
 ## 1. Getting Started
 
-1. Launch AuraScribe.
+1. Launch Aura Scribe PSY.
 2. Sign in with your username and password.
 3. If this is first use, create an account from the login screen.
 

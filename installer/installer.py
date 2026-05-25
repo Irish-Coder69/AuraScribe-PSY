@@ -13,13 +13,13 @@ from pathlib import Path
 from tkinter import DoubleVar, Tk, Toplevel, StringVar, filedialog, messagebox, ttk
 
 
-APP_NAME = "AuraScribe"
-APP_EXE = "AuraScribe.exe"
-UNINSTALL_EXE = "AuraScribe Uninstaller.exe"
+APP_NAME = "Aura Scribe PSY"
+APP_EXE = "Aura Scribe PSY.exe"
+UNINSTALL_EXE = "Aura Scribe PSY Uninstaller.exe"
 APP_BUNDLE_DIR = "app"
-UNINSTALL_CMD = "Uninstall AuraScribe.cmd"
-UNINSTALL_SHORTCUT_NAME = "Uninstall AuraScribe.lnk"
-ICON_FILE = "AuraScribe.ico"
+UNINSTALL_CMD = "Uninstall Aura Scribe PSY.cmd"
+UNINSTALL_SHORTCUT_NAME = "Uninstall Aura Scribe PSY.lnk"
+ICON_FILE = "Aura Scribe PSY.ico"
 VERSION_FILE = "version.json"
 LEGACY_START_MENU_FOLDERS = ("Thorough Track Pro", "TheraTrak-Pro")
 LEGACY_ROOT_SHORTCUTS = ("TheraTrak Pro.lnk", "Uninstall TheraTrak Pro.lnk")
@@ -309,7 +309,7 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
              font=("Segoe UI", 11, "bold"), bg=C_BODY_BG,
              fg=C_LABEL_FG).pack(anchor="w")
     tk.Label(body,
-             text="Select where AuraScribe should be installed on your computer.",
+             text="Select where Aura Scribe PSY should be installed on your computer.",
              font=FONT_LABEL, bg=C_BODY_BG, fg=C_SUB_FG).pack(anchor="w",
                                                                 pady=(2, 16))
 
@@ -347,7 +347,7 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
               activebackground="#b8d8ef",
               activeforeground=C_BROWSE_FG).pack(side="left", padx=(8, 0))
 
-    tk.Label(body, text="Default: %LOCALAPPDATA%\\Programs\\AuraScribe",
+    tk.Label(body, text="Default: %LOCALAPPDATA%\\Programs\\Aura Scribe PSY",
              font=("Segoe UI", 8), bg=C_BODY_BG,
              fg="#aaaaaa").pack(anchor="w", pady=(6, 0))
 
@@ -368,7 +368,7 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
             return
         if not _can_write_to_dir(target):
             messagebox.showerror(APP_NAME,
-                                 "AuraScribe cannot write to this folder.\n"
+                                 "Aura Scribe PSY cannot write to this folder.\n"
                                  "Choose another location.",
                                  parent=dialog)
             return
@@ -524,25 +524,25 @@ def write_uninstall_cmd(target: Path) -> Path:
         f"taskkill /IM \"{APP_EXE}\" /F >>\"%LOG%\" 2>&1\\n"
         "for %%P in (\"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\" \"%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs\" \"%USERPROFILE%\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\") do (\n"
         "  echo [%date% %time%] Cleaning Programs root: %%~P>>\"%LOG%\"\n"
-        "  del /f /q \"%%~P\\AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
-        "  del /f /q \"%%~P\\Uninstall AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
+        "  del /f /q \"%%~P\\Aura Scribe PSY.lnk\" >>\"%LOG%\" 2>&1\n"
+        "  del /f /q \"%%~P\\Uninstall Aura Scribe PSY.lnk\" >>\"%LOG%\" 2>&1\n"
         "  del /f /q \"%%~P\\TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
         "  del /f /q \"%%~P\\Uninstall TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
-        "  rmdir /s /q \"%%~P\\AuraScribe\" >>\"%LOG%\" 2>&1\n"
+        "  rmdir /s /q \"%%~P\\Aura Scribe PSY\" >>\"%LOG%\" 2>&1\n"
         "  rmdir /s /q \"%%~P\\TheraTrak Pro\" >>\"%LOG%\" 2>&1\n"
         "  rmdir /s /q \"%%~P\\Thorough Track Pro\" >>\"%LOG%\" 2>&1\n"
         "  rmdir /s /q \"%%~P\\TheraTrak-Pro\" >>\"%LOG%\" 2>&1\n"
         ")\n"
-        "del /f /q \"%USERPROFILE%\\Desktop\\AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
-        "if defined OneDrive del /f /q \"%OneDrive%\\Desktop\\AuraScribe.lnk\" >>\"%LOG%\" 2>&1\n"
+        "del /f /q \"%USERPROFILE%\\Desktop\\Aura Scribe PSY.lnk\" >>\"%LOG%\" 2>&1\n"
+        "if defined OneDrive del /f /q \"%OneDrive%\\Desktop\\Aura Scribe PSY.lnk\" >>\"%LOG%\" 2>&1\n"
         "del /f /q \"%USERPROFILE%\\Desktop\\TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
         "if defined OneDrive del /f /q \"%OneDrive%\\Desktop\\TheraTrak Pro.lnk\" >>\"%LOG%\" 2>&1\n"
-        "rmdir /s /q \"%LOCALAPPDATA%\\Temp\\AuraScribeUpdates\" >>\"%LOG%\" 2>&1\n"
+        "rmdir /s /q \"%LOCALAPPDATA%\\Temp\\AuraScribePSYUpdates\" >>\"%LOG%\" 2>&1\n"
         "rmdir /s /q \"%LOCALAPPDATA%\\Temp\\TheraTrakUpdates\" >>\"%LOG%\" 2>&1\n"
         "del /f /q \"%LOCALAPPDATA%\\Temp\\run_aurascribe_update.bat\" >>\"%LOG%\" 2>&1\n"
         "del /f /q \"%LOCALAPPDATA%\\Temp\\run_theratrak_update.bat\" >>\"%LOG%\" 2>&1\n"
-        "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AuraScribe\" /f >>\"%LOG%\" 2>&1\n"
-        "reg delete \"HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AuraScribe\" /f >>\"%LOG%\" 2>&1\n"
+        "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Aura Scribe PSY\" /f >>\"%LOG%\" 2>&1\n"
+        "reg delete \"HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Aura Scribe PSY\" /f >>\"%LOG%\" 2>&1\n"
         "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TheraTrak Pro\" /f >>\"%LOG%\" 2>&1\n"
         "reg delete \"HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TheraTrak Pro\" /f >>\"%LOG%\" 2>&1\n"
         "echo [%date% %time%] Refreshing Start menu host>>\"%LOG%\"\n"
@@ -568,14 +568,14 @@ def write_uninstall_cmd(target: Path) -> Path:
 
 
 def write_uninstall_registry(target: Path, uninstall_cmd: Path, version: str) -> None:
-    uninstall_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraScribe"
+    uninstall_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Aura Scribe PSY"
     app_exe = target / APP_EXE
     comspec = Path(os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe"))
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, uninstall_path)
     try:
         winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
         winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version)
-        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "AuraScribe")
+        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Aura Scribe PSY")
         winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(target))
         winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, str(app_exe))
         winreg.SetValueEx(
@@ -758,14 +758,14 @@ def main() -> int:
 
     source = bundled_dir()
 
-    # If AuraScribe is currently open, ask the user to let the installer
+    # If Aura Scribe PSY is currently open, ask the user to let the installer
     # close it.  Attempting to overwrite locked DLLs inside _internal/ causes
     # WinError 32 (sharing violation) on the copy step.
     if _is_app_running():
         progress_window.destroy()
         close_it = messagebox.askyesno(
             APP_NAME,
-            "AuraScribe is currently open.\n\n"
+            "Aura Scribe PSY is currently open.\n\n"
             "It must be closed before the installer can update the files.\n"
             "Click Yes to close it automatically and continue, or No to cancel.",
             parent=root,
@@ -778,7 +778,7 @@ def main() -> int:
         # Recreate progress window (indeterminate — waiting for app to exit)
         progress_window, _wait_set = _build_progress_window(
             root, screen_w, screen_h,
-            "Waiting for AuraScribe to close…",
+            "Waiting for Aura Scribe PSY to close...",
             indeterminate=True,
         )
         # Poll until process exits (up to 15 s), keeping the UI alive.
@@ -790,7 +790,7 @@ def main() -> int:
         if _is_app_running():
             messagebox.showerror(
                 APP_NAME,
-                "AuraScribe could not be closed automatically.\n"
+                "Aura Scribe PSY could not be closed automatically.\n"
                 "Please close it manually and run the installer again.",
                 parent=root,
             )
@@ -832,7 +832,7 @@ def main() -> int:
         messagebox.showerror(
             APP_NAME,
             "Install failed while copying application files.\n"
-            "Please close AuraScribe and retry.\n\n"
+            "Please close Aura Scribe PSY and retry.\n\n"
             f"Details: {ex}",
         )
         root.destroy()
@@ -907,7 +907,7 @@ def main() -> int:
 
     messagebox.showinfo(
         APP_NAME,
-        "AuraScribe was installed successfully.\n\nDesktop and Start Menu shortcuts were created.\nAn uninstaller was also registered in Installed Apps.",
+        "Aura Scribe PSY was installed successfully.\n\nDesktop and Start Menu shortcuts were created.\nAn uninstaller was also registered in Installed Apps.",
     )
     root.destroy()
     return 0

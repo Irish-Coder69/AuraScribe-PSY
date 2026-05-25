@@ -32,7 +32,7 @@ foreach ($candidate in $pythonCandidates) {
     }
 }
 $versionJson = Join-Path $root 'version.json'
-$installerExe = Join-Path $root 'release\AuraScribe-Installer.exe'
+$installerExe = Join-Path $root 'release\Aura Scribe PSY-Installer.exe'
 
 if (-not (Test-Path $python)) {
     throw 'No runnable Python virtual environment found (.venv311 or .venv).'
@@ -70,7 +70,7 @@ try {
 
     $version = Get-Content $versionJson -Raw | ConvertFrom-Json
     $versionTag = "v$($version.major).$($version.minor).$($version.patch)-build$($version.build)"
-    $versionTitle = "AuraScribe v$($version.major).$($version.minor).$($version.patch) Build $($version.build)"
+    $versionTitle = "Aura Scribe PSY v$($version.major).$($version.minor).$($version.patch) Build $($version.build)"
 
     if (-not $CommitMessage) {
         $CommitMessage = "Build $($version.build): automated release"

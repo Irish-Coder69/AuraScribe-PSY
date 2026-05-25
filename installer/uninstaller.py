@@ -10,9 +10,9 @@ import ctypes
 from pathlib import Path
 
 
-APP_NAME = "AuraScribe"
-APP_EXE = "AuraScribe.exe"
-ICON_FILE = "AuraScribe.ico"
+APP_NAME = "Aura Scribe PSY"
+APP_EXE = "Aura Scribe PSY.exe"
+ICON_FILE = "Aura Scribe PSY.ico"
 LEGACY_START_MENU_FOLDERS = ("Thorough Track Pro", "TheraTrak-Pro")
 LEGACY_ROOT_SHORTCUTS = ("TheraTrak Pro.lnk", "Uninstall TheraTrak Pro.lnk")
 
@@ -90,7 +90,7 @@ def start_menu_dirs() -> list[Path]:
 
 
 def remove_registry_entry() -> None:
-    key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraScribe"
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Aura Scribe PSY"
     for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
         try:
             winreg.DeleteKey(hive, key_path)
@@ -158,7 +158,7 @@ def schedule_self_delete_folder(target: Path) -> None:
 
 
 def main() -> int:
-    if not ask_yes_no("Uninstall AuraScribe from this computer?"):
+    if not ask_yes_no("Uninstall Aura Scribe PSY from this computer?"):
         return 0
 
     target = install_dir()
@@ -176,7 +176,7 @@ def main() -> int:
     except OSError:
         pass
 
-    show_info("AuraScribe was uninstalled.")
+    show_info("Aura Scribe PSY was uninstalled.")
     return 0
 
 
