@@ -7563,14 +7563,17 @@ class TheraTrakApp(tk.Tk):
         if not current_version:
             return
         seen_version = (db.get_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, "") or "").strip()
-        if seen_version == current_version:
+        current_tuple = self._parse_version_tuple(current_version)
+        seen_tuple = self._parse_version_tuple(seen_version)
+        if (current_tuple != (0, 0, 0, 0) and seen_tuple == current_tuple) or seen_version == current_version:
             return
 
         notes_version = (db.get_app_preference(UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY, "") or "").strip()
         notes_body = (db.get_app_preference(UPDATE_ANNOUNCEMENT_NOTES_BODY_PREF_KEY, "") or "").strip()
+        notes_tuple = self._parse_version_tuple(notes_version)
 
         details_text = ""
-        if notes_version == current_version and notes_body:
+        if notes_body and (notes_tuple == current_tuple or notes_version == current_version):
             details_text = notes_body
             if len(details_text) > 2400:
                 details_text = (
@@ -7578,7 +7581,8 @@ class TheraTrakApp(tk.Tk):
                     + "\n\n(Release notes truncated. Use Help > Check for Updates for full details.)"
                 )
 
-        db.set_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, current_version)
+        canonical_current = self._format_tag_version(current_version)
+        db.set_app_preference(UPDATE_ANNOUNCEMENT_SEEN_PREF_KEY, canonical_current)
 
         if details_text:
             msg = (
@@ -8080,7 +8084,7 @@ class TheraTrakApp(tk.Tk):
             hdr.create_text(
                 win_w // 2,
                 header_h // 2 - 8,
-                text=APP_NAME,
+                text="Aura Scribe PSY",
                 font=("Segoe UI", 16, "bold"),
                 fill="white",
                 anchor="center",
@@ -8352,6 +8356,8 @@ class TheraTrakApp(tk.Tk):
         release_url = payload.get("html_url") or GITHUB_RELEASES_PAGE
         installer_asset = self._pick_installer_asset(payload)
         release_notes = (payload.get("body") or "").strip()
+        if not release_notes:
+            release_notes = "No detailed release notes were provided for this build."
 
         if latest_tuple > current_tuple:
             do_update = messagebox.askyesno(
@@ -8367,7 +8373,10 @@ class TheraTrakApp(tk.Tk):
             # Cache release notes so the next login announcement can show exactly what changed.
             # Wrap in try/except so a DB error never silently kills the update flow.
             try:
-                db.set_app_preference(UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY, latest_display)
+                db.set_app_preference(
+                    UPDATE_ANNOUNCEMENT_NOTES_VERSION_PREF_KEY,
+                    self._format_tag_version(latest_tag) if latest_tag else latest_display,
+                )
                 db.set_app_preference(UPDATE_ANNOUNCEMENT_NOTES_BODY_PREF_KEY, release_notes)
             except Exception:
                 pass  # Non-fatal; update can still proceed without caching notes
