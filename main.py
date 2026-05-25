@@ -8306,6 +8306,25 @@ class TheraTrakApp(tk.Tk):
             raise ValueError("Unexpected response from update server.")
         return payload
 
+    def _is_aura_scribe_release(self, payload: dict) -> bool:
+        if not isinstance(payload, dict):
+            return False
+
+        name = str(payload.get("name") or "").lower()
+        if "aura scribe" in name or "aurascribe" in name:
+            return True
+
+        assets = payload.get("assets")
+        if isinstance(assets, list):
+            for asset in assets:
+                if not isinstance(asset, dict):
+                    continue
+                asset_name = str(asset.get("name") or "").lower()
+                if "aura" in asset_name and "scribe" in asset_name:
+                    return True
+
+        return False
+
     def _fetch_best_release_payload(self, timeout: int = 8) -> dict:
         """Return the most reliable latest published release payload.
 
@@ -8336,6 +8355,8 @@ class TheraTrakApp(tk.Tk):
                 continue
             if item.get("draft") or item.get("prerelease"):
                 continue
+            if not self._is_aura_scribe_release(item):
+                continue
             tag = item.get("tag_name") or item.get("name") or ""
             ver = self._parse_version_tuple(str(tag))
             if ver == (0, 0, 0, 0):
@@ -8343,11 +8364,15 @@ class TheraTrakApp(tk.Tk):
             published.append((ver, item))
 
         if not published:
+            if self._is_aura_scribe_release(latest_payload):
+                return latest_payload
             return latest_payload
 
         best_item = max(published, key=lambda pair: pair[0])[1]
-        latest_tag = latest_payload.get("tag_name") or latest_payload.get("name") or ""
-        latest_ver = self._parse_version_tuple(str(latest_tag))
+        latest_ver = (0, 0, 0, 0)
+        if self._is_aura_scribe_release(latest_payload):
+            latest_tag = latest_payload.get("tag_name") or latest_payload.get("name") or ""
+            latest_ver = self._parse_version_tuple(str(latest_tag))
         best_tag = best_item.get("tag_name") or best_item.get("name") or ""
         best_ver = self._parse_version_tuple(str(best_tag))
 
