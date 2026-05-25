@@ -8195,8 +8195,28 @@ class TheraTrakApp(tk.Tk):
         progress_win.update_idletasks()
         width = max(win_w, progress_win.winfo_reqwidth())
         height = progress_win.winfo_reqheight()
-        x = max(0, (screen_w - width) // 2)
-        y = max(0, (screen_h - height) // 2)
+
+        # Prefer centering over the app window so placement is correct on
+        # multi-monitor setups; fall back to screen center when needed.
+        try:
+            parent_x = int(self.winfo_rootx())
+            parent_y = int(self.winfo_rooty())
+            parent_w = int(self.winfo_width())
+            parent_h = int(self.winfo_height())
+            if parent_w <= 1 or parent_h <= 1:
+                raise ValueError("Parent geometry not ready")
+            x = parent_x + (parent_w - width) // 2
+            y = parent_y + (parent_h - height) // 2
+        except Exception:
+            x = (screen_w - width) // 2
+            y = (screen_h - height) // 2
+
+        vroot_x = int(progress_win.winfo_vrootx())
+        vroot_y = int(progress_win.winfo_vrooty())
+        vroot_w = int(progress_win.winfo_vrootwidth())
+        vroot_h = int(progress_win.winfo_vrootheight())
+        x = max(vroot_x, min(x, vroot_x + max(0, vroot_w - width)))
+        y = max(vroot_y, min(y, vroot_y + max(0, vroot_h - height)))
         progress_win.geometry(f"{width}x{height}+{x}+{y}")
         progress_win.update()
 
