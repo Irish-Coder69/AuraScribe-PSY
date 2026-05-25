@@ -22,6 +22,7 @@ APP_BUNDLE_DIR = "app"
 UNINSTALL_CMD = "Uninstall Aura Scribe PSY.cmd"
 UNINSTALL_SHORTCUT_NAME = "Uninstall Aura Scribe PSY.lnk"
 ICON_FILE = "Aura Scribe PSY.ico"
+SETUP_WIZARD_JPG = "Aura Scribe PSY.jpg"
 VERSION_FILE = "version.json"
 DB_FILE_NAME = "theratrak.db"
 UNINSTALL_KEY_CURRENT = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Aura Scribe PSY"
@@ -282,6 +283,41 @@ def _apply_window_icon(window, icon_candidate: Path | None = None) -> None:
             pass
 
 
+def _setup_wizard_image_candidates() -> list[Path]:
+    base = bundled_dir()
+    return [
+        base / SETUP_WIZARD_JPG,
+        base / "assets" / SETUP_WIZARD_JPG,
+        Path.cwd() / SETUP_WIZARD_JPG,
+        Path.home() / "Pictures" / APP_NAME / SETUP_WIZARD_JPG,
+    ]
+
+
+def _load_setup_wizard_banner(width: int, height: int):
+    try:
+        from PIL import Image, ImageOps, ImageTk
+    except Exception:
+        return None
+
+    for candidate in _setup_wizard_image_candidates():
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            with Image.open(candidate) as source:
+                source = source.convert("RGB")
+                fit_mode = getattr(Image, "Resampling", Image).LANCZOS
+                rendered = ImageOps.fit(
+                    source,
+                    (width, height),
+                    method=fit_mode,
+                    centering=(0.5, 0.5),
+                )
+            return ImageTk.PhotoImage(rendered)
+        except Exception:
+            continue
+    return None
+
+
 def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
     import tkinter as tk
 
@@ -327,71 +363,75 @@ def choose_install_dir(root: Tk, default_path: Path) -> Path | None:
     hdr = tk.Canvas(dialog, width=DIALOG_W, height=HEADER_H, highlightthickness=0)
     hdr.pack(fill="x")
 
-    # Gradient fill
-    r0, g0, b0 = C_GRAD_TOP
-    r1, g1, b1 = C_GRAD_BOT
-    for i in range(HEADER_H):
-        t = i / max(1, HEADER_H - 1)
-        r = int(r0 + (r1 - r0) * t)
-        g = int(g0 + (g1 - g0) * t)
-        b = int(b0 + (b1 - b0) * t)
-        hdr.create_line(0, i, DIALOG_W, i, fill=f"#{r:02x}{g:02x}{b:02x}")
+    banner_photo = _load_setup_wizard_banner(DIALOG_W, HEADER_H)
+    if banner_photo is not None:
+        hdr.create_image(DIALOG_W // 2, HEADER_H // 2, image=banner_photo, anchor="center")
+        hdr.image = banner_photo
+        hdr.create_rectangle(0, HEADER_H - 36, DIALOG_W, HEADER_H, fill="#11283c", outline="")
+        hdr.create_text(
+            DIALOG_W // 2,
+            HEADER_H - 20,
+            text="Setup Wizard",
+            font=FONT_SUB,
+            fill="#d6eef8",
+            anchor="center",
+        )
+    else:
+        # Gradient fill
+        r0, g0, b0 = C_GRAD_TOP
+        r1, g1, b1 = C_GRAD_BOT
+        for i in range(HEADER_H):
+            t = i / max(1, HEADER_H - 1)
+            r = int(r0 + (r1 - r0) * t)
+            g = int(g0 + (g1 - g0) * t)
+            b = int(b0 + (b1 - b0) * t)
+            hdr.create_line(0, i, DIALOG_W, i, fill=f"#{r:02x}{g:02x}{b:02x}")
 
-    # ── Logo: clean thin-lined "A" — crossbar replaced by audio waveform ─────
-    #
-    #          apex
-    #           /\
-    #          /  \       ← thin white legs, line-width 1.8
-    #         /~~~~\      ← waveform instead of flat crossbar
-    #        /      \
-    #
-    cx   = DIALOG_W // 2    # horizontal centre
-    a_y  = 8                # apex y
-    b_y  = 52               # bottom y
-    hw   = 24               # half-width at bottom
+        # ── Logo: clean thin-lined "A" with waveform crossbar ───────────────
+        cx = DIALOG_W // 2
+        a_y = 8
+        b_y = 52
+        hw = 24
 
-    # left and right legs
-    hdr.create_line(cx, a_y, cx - hw, b_y, fill="white", width=1.8,
-                    capstyle="round")
-    hdr.create_line(cx, a_y, cx + hw, b_y, fill="white", width=1.8,
-                    capstyle="round")
+        hdr.create_line(cx, a_y, cx - hw, b_y, fill="white", width=1.8, capstyle="round")
+        hdr.create_line(cx, a_y, cx + hw, b_y, fill="white", width=1.8, capstyle="round")
 
-    # crossbar position (55 % of the way from apex to base)
-    t_c   = 0.55
-    wf_y  = a_y + (b_y - a_y) * t_c          # y of the crossbar ≈ 34
-    wf_xl = cx - hw * t_c                     # left  leg x at that height
-    wf_xr = cx + hw * t_c                     # right leg x at that height
+        t_c = 0.55
+        wf_y = a_y + (b_y - a_y) * t_c
+        wf_xl = cx - hw * t_c
+        wf_xr = cx + hw * t_c
 
-    # Waveform control points (nx in [-1,1], ny: negative = up on screen)
-    # Mimics a compact voice waveform — quiet at edges, animated in the middle
-    wf_nodes = [
-        (-1.00,  0.00),
-        (-0.80, -0.30),
-        (-0.58, -0.80),
-        (-0.36,  0.25),
-        (-0.14, -1.00),
-        ( 0.08,  0.40),
-        ( 0.28, -0.70),
-        ( 0.50,  0.20),
-        ( 0.72, -0.50),
-        ( 0.88, -0.20),
-        ( 1.00,  0.00),
-    ]
-    amp    = 5.0
-    wf_pts = []
-    span   = wf_xr - wf_xl
-    for nx, ny in wf_nodes:
-        wf_pts.append(wf_xl + (nx + 1) / 2.0 * span)
-        wf_pts.append(wf_y + ny * amp)
+        wf_nodes = [
+            (-1.00, 0.00),
+            (-0.80, -0.30),
+            (-0.58, -0.80),
+            (-0.36, 0.25),
+            (-0.14, -1.00),
+            (0.08, 0.40),
+            (0.28, -0.70),
+            (0.50, 0.20),
+            (0.72, -0.50),
+            (0.88, -0.20),
+            (1.00, 0.00),
+        ]
+        amp = 5.0
+        wf_pts = []
+        span = wf_xr - wf_xl
+        for nx, ny in wf_nodes:
+            wf_pts.append(wf_xl + (nx + 1) / 2.0 * span)
+            wf_pts.append(wf_y + ny * amp)
 
-    hdr.create_line(*wf_pts, fill="white", width=1.6,
-                    smooth=True, capstyle="round", joinstyle="round")
+        hdr.create_line(
+            *wf_pts,
+            fill="white",
+            width=1.6,
+            smooth=True,
+            capstyle="round",
+            joinstyle="round",
+        )
 
-    # App name and subtitle drawn on the canvas
-    hdr.create_text(cx, b_y + 18, text=APP_NAME,
-                    font=FONT_TITLE, fill=C_HDR_TEXT, anchor="center")
-    hdr.create_text(cx, b_y + 40, text="Setup Wizard",
-                    font=FONT_SUB, fill=C_HDR_SUB, anchor="center")
+        hdr.create_text(cx, b_y + 18, text=APP_NAME, font=FONT_TITLE, fill=C_HDR_TEXT, anchor="center")
+        hdr.create_text(cx, b_y + 40, text="Setup Wizard", font=FONT_SUB, fill=C_HDR_SUB, anchor="center")
 
     # ── Accent divider ───────────────────────────────────────────────────────
     tk.Frame(dialog, bg=C_DIVIDER, height=3).pack(fill="x")

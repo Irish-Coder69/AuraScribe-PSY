@@ -22,6 +22,7 @@ foreach ($candidate in $pythonCandidates) {
     }
 }
 $icon = Join-Path $root 'Aura Scribe PSY.ico'
+$setupWizardJpg = Join-Path $root 'Aura Scribe PSY.jpg'
 $mainPy = Join-Path $root 'main.py'
 $installerPy = Join-Path $root 'installer\installer.py'
 $uninstallerPy = Join-Path $root 'installer\uninstaller.py'
@@ -206,9 +207,17 @@ $installerArgs = @(
     '--add-data', ((Join-Path $distDir 'Aura Scribe PSY Uninstaller.exe') + ';.'),
     '--add-data', ($icon + ';.'),
     '--add-data', ($versionJson + ';.'),
-    '--version-file', $installerVerFile,
-    $installerPy
+    '--version-file', $installerVerFile
 )
+
+if (Test-Path $setupWizardJpg) {
+    $installerArgs += @('--add-data', ($setupWizardJpg + ';.'))
+    Write-Host "Including setup wizard image: Aura Scribe PSY.jpg"
+} else {
+    Write-Warning "Aura Scribe PSY.jpg not found at repo root; setup wizard will use fallback header design."
+}
+
+$installerArgs += $installerPy
 
 & $python @installerArgs
 
