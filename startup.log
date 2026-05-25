@@ -1,8 +1,0 @@
-[2026-05-25 12:45:26] Display: 1920x1080  DPI: 96  Scale: 1.00x  Machine: desktop
-[2026-05-25 12:45:26] Monitors: 3  FitArea: 1920x1032  MaxScale: 1.00x  Logical: 1920x1032  DenseMode: no
-[2026-05-25 12:45:28] Startup update check: Up to date: 1.0.1 Build 23
-[2026-05-25 12:46:16] Display: 1920x1080  DPI: 96  Scale: 1.00x  Machine: desktop
-[2026-05-25 12:46:16] Monitors: 3  FitArea: 1920x1032  MaxScale: 1.00x  Logical: 1920x1032  DenseMode: no
-[2026-05-25 12:46:17] Startup update check: contacting GitHub releases API (timeout=6s)
-[2026-05-25 12:46:17] Startup update check: GitHub latest selected tag=v1.0.1-build23
-[2026-05-25 12:46:17] Startup update check: Up to date: 1.0.1 Build 23

@@ -17,3 +17,6 @@ dist/
 
 # Release artifacts
 release/*.exe
+
+# Runtime logs
+startup.log
