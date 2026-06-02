@@ -881,7 +881,7 @@ def _get_place_display(place_code: str) -> str:
 
 
 def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
-    """Discover dictation software by scanning installed software metadata on Windows."""
+    """Discover dictation software by scanning installed software metadata and common install locations on Windows."""
     built_in = [("Windows Built-in Dictation (Win+H)", "")]
     if os.name != "nt":
         return built_in
@@ -922,6 +922,16 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
             return "Windows Speech Recognition"
         cleaned = (text or "").strip()
         return cleaned if cleaned else "Detected Dictation App"
+
+    def _label_from_path(path: Path) -> str:
+        parts = [part for part in path.parts if part]
+        for part in reversed(parts):
+            part_low = part.lower()
+            if _has_keyword(part_low):
+                return _label_from_text(part)
+            if any(h.replace(".exe", "") in part_low for h in exe_hints):
+                return _label_from_text(part)
+        return _label_from_text(path.stem or path.name)
 
     def _extract_exe_path(raw: str) -> str:
         txt = str(raw or "").strip().strip('"')
@@ -964,6 +974,85 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
         located.add(key)
         found.append((label, path_text))
 
+    def _scan_directory(root: Path, *, max_depth: int = 4, max_files: int = 4000, include_shortcuts: bool = True):
+        if not root or not root.exists() or not root.is_dir():
+            return
+
+        seen_files = 0
+        try:
+            root = root.resolve()
+        except Exception:
+            pass
+
+        for dirpath, dirnames, filenames in os.walk(root):
+            current_dir = Path(dirpath)
+            try:
+                depth = len(current_dir.relative_to(root).parts)
+            except Exception:
+                depth = 0
+            if depth >= max_depth:
+                dirnames[:] = []
+
+            dir_text = str(current_dir).lower()
+            dir_matches = _has_keyword(dir_text) or any(h in dir_text for h in exe_hints)
+
+            for fname in filenames:
+                seen_files += 1
+                if seen_files > max_files:
+                    return
+
+                file_path = current_dir / fname
+                name_low = fname.lower()
+                if name_low.endswith(".exe"):
+                    if dir_matches or _has_keyword(name_low) or any(h in name_low for h in exe_hints):
+                        _add(_label_from_path(file_path), file_path)
+                elif include_shortcuts and name_low.endswith((".lnk", ".appref-ms", ".url")):
+                    if dir_matches or _has_keyword(name_low) or any(k in name_low for k in keywords):
+                        _add(_label_from_path(file_path), file_path)
+
+    def _scan_processes():
+        if os.name != "nt":
+            return
+
+        ps_cmd = (
+            "$p=Get-CimInstance Win32_Process | Select-Object Name,ExecutablePath,CommandLine | ConvertTo-Json -Depth 2;"
+            "if($p){$p}"
+        )
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True,
+                text=True,
+                timeout=12,
+                check=False,
+            )
+        except Exception:
+            return
+
+        raw = (proc.stdout or "").strip()
+        if not raw:
+            return
+
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            return
+
+        rows = payload if isinstance(payload, list) else [payload]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("Name") or "")
+            exe_path = str(row.get("ExecutablePath") or "")
+            cmdline = str(row.get("CommandLine") or "")
+            blob = " ".join(part for part in (name, exe_path, cmdline) if part).strip()
+            if not blob or not _has_keyword(blob):
+                continue
+
+            candidate = _extract_exe_path(exe_path) or _extract_exe_path(cmdline)
+            if candidate:
+                _add(_label_from_text(blob), candidate)
+
     # Fast known-path checks first.
     pf = Path(os.environ.get("ProgramFiles", ""))
     pfx86 = Path(os.environ.get("ProgramFiles(x86)", ""))
@@ -977,6 +1066,57 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
     ]
     for label, p in known_paths:
         _add(label, p)
+
+    # Scan common shortcut folders and install locations so apps that do not
+    # register cleanly in Add/Remove Programs can still be discovered.
+    shortcut_roots = [
+        Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+        Path(os.environ.get("PUBLIC", "")) / "Desktop",
+        Path(os.environ.get("USERPROFILE", "")) / "Desktop",
+        Path(os.environ.get("USERPROFILE", "")) / "Documents",
+        Path(os.environ.get("USERPROFILE", "")) / "Downloads",
+        Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+        Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Local" / "Programs",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Packages",
+        Path(os.environ.get("OneDrive", "")),
+        Path(os.environ.get("OneDriveCommercial", "")),
+    ]
+    for root in shortcut_roots:
+        _scan_directory(root, max_depth=3, max_files=2000, include_shortcuts=True)
+
+    install_roots = [
+        pf,
+        pfx86,
+        local / "Programs",
+        local / "Microsoft",
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft",
+    ]
+    for root in install_roots:
+        _scan_directory(root, max_depth=4, max_files=5000, include_shortcuts=False)
+
+    # Scan running processes so portable or per-user dictation apps are still
+    # discovered even when they are not installed in the usual folders.
+    _scan_processes()
+
+    # Scan PATH entries for portable dictation apps.
+    path_env = os.environ.get("PATH", "")
+    for raw_dir in path_env.split(os.pathsep):
+        if not raw_dir:
+            continue
+        try:
+            path_dir = Path(raw_dir.strip().strip('"'))
+        except Exception:
+            continue
+        if not path_dir.exists() or not path_dir.is_dir():
+            continue
+        try:
+            for exe_name in exe_hints:
+                candidate = path_dir / exe_name
+                if candidate.exists():
+                    _add(_label_from_path(candidate), candidate)
+        except OSError:
+            continue
 
     # Scan all App Paths entries (not just a fixed whitelist).
     app_paths_root = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
@@ -2631,6 +2771,73 @@ class SessionDialog(tk.Toplevel):
             self._save_dictation_preference("external_app", path, Path(path).name)
             self._launch_dictation_app(path)
 
+    def _show_dictation_scan_results(self, detected, parent_window=None):
+        detected = list(detected or [])
+        installed = [(label, exe) for label, exe in detected if exe]
+        built_in = [label for label, exe in detected if not exe]
+
+        lines = [
+            "Dictation Scan Results",
+            "",
+            f"Installed dictation apps found: {len(installed)}",
+            f"Built-in dictation options found: {len(built_in)}",
+            "",
+        ]
+
+        if installed:
+            lines.append("Installed apps:")
+            for label, exe in installed:
+                lines.append(f"- {label} -> {exe}")
+            lines.append("")
+
+        if built_in:
+            lines.append("Built-in options:")
+            for label in built_in:
+                lines.append(f"- {label}")
+            lines.append("")
+
+        if not detected:
+            lines.append("No dictation software was detected automatically.")
+            lines.append("You can still use Windows built-in dictation or browse for an app manually.")
+
+        win = tk.Toplevel(parent_window or self)
+        apply_window_icon(win)
+        win.title("Dictation Scan Results")
+        win.resizable(True, True)
+        win.transient(parent_window or self)
+
+        try:
+            win.state("zoomed")
+        except Exception:
+            _w, _h = _screen_fit(max(900, SCREEN_W - 40), max(620, SCREEN_H - 80), pad=0)
+            win.geometry(f"{_w}x{_h}+0+0")
+
+        frm = ttk.Frame(win, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text="Dictation Scan Results", font=FONT_LG).pack(anchor="w")
+        ttk.Label(frm, text=f"Installed apps found: {len(installed)}    Built-in options found: {len(built_in)}", foreground=MUTED).pack(anchor="w", pady=(4, 8))
+
+        txt = tk.Text(frm, wrap="word", font=FONT_UI, relief="solid", borderwidth=1)
+        sb = ttk.Scrollbar(frm, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        txt.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        txt.insert("1.0", "\n".join(lines))
+        txt.configure(state="disabled")
+
+        btn_row = ttk.Frame(win, padding=(12, 0, 12, 12))
+        btn_row.pack(fill="x")
+
+        def _copy_results():
+            self.clipboard_clear()
+            self.clipboard_append("\n".join(lines))
+            self.update()
+            messagebox.showinfo("Dictation Scan Results", "Results copied to clipboard.", parent=win)
+
+        btn(btn_row, "Copy Results", _copy_results, "Accent.TButton").pack(side="left", padx=4)
+        btn(btn_row, "Close", win.destroy).pack(side="left", padx=4)
+
     def _show_system_dictation_help(self):
         lines = [
             "Use Any Dictation Software",
@@ -2696,21 +2903,15 @@ class SessionDialog(tk.Toplevel):
         # ── Header for detected apps section ──────────────────────────────
         header_frame = ttk.Frame(frm)
         header_frame.pack(fill="x", pady=(0, 6))
-        ttk.Label(header_frame, text="Detected Dictation Software:", font=FONT_SM).pack(side="left")
+        ttk.Label(header_frame, text="Detected Dictation Software (computer scan):", font=FONT_SM).pack(side="left")
         
         def _rescan():
-            messagebox.showinfo("Scanning", "Rescanning for dictation software...", parent=win)
             self._cached_dictation_apps = self._find_dictation_apps()
-            detected_count = sum(1 for _, exe in self._cached_dictation_apps if exe)
-            messagebox.showinfo(
-                "Scan Complete",
-                f"Scan complete. Found {detected_count} installed dictation app(s).",
-                parent=win,
-            )
+            self._show_dictation_scan_results(self._cached_dictation_apps, parent_window=win)
             win.destroy()
             self._open_dictation_settings()
         
-        btn(header_frame, "Rescan for Software", _rescan).pack(side="right")
+        btn(header_frame, "Rescan Computer", _rescan).pack(side="right")
 
         # Use cached apps if available, otherwise scan now
         detected = self._cached_dictation_apps if self._cached_dictation_apps else self._find_dictation_apps()
@@ -7344,6 +7545,7 @@ class TheraTrakApp(tk.Tk):
         self._startup_update_message = ""
         self._startup_update_available = False
         self._startup_latest_version = ""
+        self._startup_dictation_scan_message = ""
         self.title(f"Aura Scribe PSY - {self._version}")
         
         # ── Cache detected dictation software at startup ──────────────────────
@@ -8713,10 +8915,17 @@ class TheraTrakApp(tk.Tk):
         """Background scan for dictation apps at startup. Caches result for UI dialogs."""
         def _scan_thread():
             try:
-                self._cached_dictation_apps = self._find_dictation_apps()
+                detected = self._find_dictation_apps()
+                self._cached_dictation_apps = detected
+                installed_count = sum(1 for _, exe in detected if exe)
+                if installed_count > 0:
+                    self._startup_dictation_scan_message = f"Dictation scan complete: {installed_count} installed app(s) found."
+                else:
+                    self._startup_dictation_scan_message = "Dictation scan complete: no installed dictation apps found."
             except Exception as e:
                 _append_startup_log(f"Dictation scan error: {e}")
                 self._cached_dictation_apps = [("Windows Built-in Dictation (Win+H)", "")]
+                self._startup_dictation_scan_message = "Dictation scan complete: using Windows built-in dictation fallback."
 
         t = threading.Thread(target=_scan_thread, daemon=True)
         t.start()
@@ -8789,8 +8998,11 @@ if __name__ == "__main__":
             app.deiconify()
             app.show_post_update_announcement_if_needed()
             app.update_idletasks()
-            if app._startup_update_message:
-                app._status_lbl.config(text=app._startup_update_message)
+            startup_messages = [
+                msg for msg in (app._startup_dictation_scan_message, app._startup_update_message) if msg
+            ]
+            if startup_messages:
+                app._status_lbl.config(text=" | ".join(startup_messages))
             app._notify_startup_update_if_available()
             try:
                 app.state("zoomed")
