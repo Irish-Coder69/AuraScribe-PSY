@@ -964,7 +964,8 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
         if ".exe," in low:
             path_text = path_text.split(",", 1)[0].strip().strip('"')
             low = path_text.lower()
-        if not low.endswith(".exe"):
+        launchable_exts = (".exe", ".lnk", ".appref-ms", ".url")
+        if not low.endswith(launchable_exts):
             return
         if not Path(path_text).exists():
             return
@@ -2746,8 +2747,9 @@ class SessionDialog(tk.Toplevel):
             if not p:
                 self._show_system_dictation_help()
                 return
-            if os.name == "nt" and not p.lower().endswith(".exe"):
-                # Non-executable files (e.g., .cpl) should be opened via Shell.
+            if os.name == "nt":
+                # On Windows, ShellExecute is more reliable than direct Popen for
+                # app aliases, shortcuts, and some vendor launchers.
                 os.startfile(p)
                 self._external_dictation_proc = None
             else:
@@ -2759,7 +2761,34 @@ class SessionDialog(tk.Toplevel):
                 self._btn_stop_dict.configure(state="normal")
             self._dict_sv.set("Dictation: external app launched")
         except Exception as ex:
-            messagebox.showerror("Launch Failed", f"Could not launch:\n{exe_path}\n\n{ex}", parent=self)
+            p = str(exe_path or "").strip().strip('"')
+            fallback_opened = False
+            if os.name == "nt" and p:
+                try:
+                    target = Path(p)
+                    if target.exists() and target.is_file():
+                        subprocess.Popen(["explorer", "/select,", str(target)])
+                        fallback_opened = True
+                    elif target.exists() and target.is_dir():
+                        os.startfile(str(target))
+                        fallback_opened = True
+                    else:
+                        parent_dir = target.parent
+                        if parent_dir.exists():
+                            os.startfile(str(parent_dir))
+                            fallback_opened = True
+                except Exception:
+                    fallback_opened = False
+
+            if fallback_opened:
+                messagebox.showerror(
+                    "Launch Failed",
+                    f"Could not launch:\n{exe_path}\n\n{ex}\n\n"
+                    "File Explorer was opened to the detected location so you can launch it manually.",
+                    parent=self,
+                )
+            else:
+                messagebox.showerror("Launch Failed", f"Could not launch:\n{exe_path}\n\n{ex}", parent=self)
 
     def _browse_and_launch_dictation(self):
         path = filedialog.askopenfilename(
