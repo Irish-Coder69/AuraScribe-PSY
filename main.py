@@ -880,6 +880,105 @@ def _get_place_display(place_code: str) -> str:
     return place_code
 
 
+def _extract_executable_from_command(raw: str) -> str:
+    """Extract an executable path from a Windows command string."""
+    txt = str(raw or "").strip().strip('"')
+    if not txt:
+        return ""
+
+    txt = os.path.expandvars(txt)
+    if ".exe," in txt.lower():
+        txt = txt.split(",", 1)[0].strip().strip('"')
+
+    if txt.lower().endswith(".exe") and Path(txt).exists():
+        return txt
+
+    m = re.search(r'"([A-Za-z]:\\[^\"]+?\.exe)"', txt, flags=re.IGNORECASE)
+    if m:
+        p = os.path.expandvars(m.group(1))
+        if Path(p).exists():
+            return p
+
+    m = re.search(r'([A-Za-z]:\\[^\s]+?\.exe)', txt, flags=re.IGNORECASE)
+    if m:
+        p = os.path.expandvars(m.group(1))
+        if Path(p).exists():
+            return p
+
+    return ""
+
+
+def _resolve_windows_shortcut_target(path_text: str) -> str:
+    """Resolve a .lnk file to its target executable when possible."""
+    if os.name != "nt":
+        return ""
+
+    shortcut = Path(str(path_text or "").strip().strip('"'))
+    if not shortcut.exists() or shortcut.suffix.lower() != ".lnk":
+        return ""
+
+    # Use WScript.Shell so we can convert shortcuts into real launch targets.
+    ps_path = str(shortcut).replace("'", "''")
+    ps_cmd = (
+        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('"
+        + ps_path
+        + "');"
+        "[pscustomobject]@{TargetPath=$s.TargetPath;Arguments=$s.Arguments}|ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception:
+        return ""
+
+    raw = (result.stdout or "").strip()
+    if not raw:
+        return ""
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return ""
+
+    if not isinstance(payload, dict):
+        return ""
+
+    target = _extract_executable_from_command(str(payload.get("TargetPath") or ""))
+    if target:
+        return target
+
+    return ""
+
+
+def _normalize_dictation_launch_path(path_text: str) -> str:
+    """Normalize detected launch path to a concrete executable when possible."""
+    raw = str(path_text or "").strip().strip('"')
+    if not raw:
+        return ""
+
+    raw = os.path.expandvars(raw)
+    candidate = Path(raw)
+    if candidate.suffix.lower() == ".lnk":
+        resolved = _resolve_windows_shortcut_target(raw)
+        if resolved:
+            return resolved
+
+    exe_from_cmd = _extract_executable_from_command(raw)
+    if exe_from_cmd:
+        return exe_from_cmd
+
+    if candidate.exists():
+        return str(candidate)
+
+    return ""
+
+
 def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
     """Discover dictation software by scanning installed software metadata and common install locations on Windows."""
     built_in = [("Windows Built-in Dictation (Win+H)", "")]
@@ -934,46 +1033,30 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
         return _label_from_text(path.stem or path.name)
 
     def _extract_exe_path(raw: str) -> str:
-        txt = str(raw or "").strip().strip('"')
-        if not txt:
-            return ""
-
-        # DisplayIcon often has trailing ",0" index.
-        if ".exe," in txt.lower():
-            txt = txt.split(",", 1)[0].strip().strip('"')
-
-        low = txt.lower()
-        if low.endswith(".exe") and Path(txt).exists():
-            return txt
-
-        m = re.search(r'"([A-Za-z]:\\[^\"]+?\.exe)"', txt, flags=re.IGNORECASE)
-        if m and Path(m.group(1)).exists():
-            return m.group(1)
-
-        m = re.search(r'([A-Za-z]:\\[^\s]+?\.exe)', txt, flags=re.IGNORECASE)
-        if m and Path(m.group(1)).exists():
-            return m.group(1)
-
-        return ""
+        return _extract_executable_from_command(raw)
 
     def _add(label: str, p: str | Path):
         path_text = str(p or "").strip().strip('"')
         if not path_text:
             return
-        low = path_text.lower()
-        if ".exe," in low:
-            path_text = path_text.split(",", 1)[0].strip().strip('"')
-            low = path_text.lower()
-        launchable_exts = (".exe", ".lnk", ".appref-ms", ".url")
-        if not low.endswith(launchable_exts):
+
+        normalized = _normalize_dictation_launch_path(path_text)
+        if not normalized:
             return
-        if not Path(path_text).exists():
+
+        low = normalized.lower()
+        # Filter out uninstallers so we keep real app launchers.
+        if any(tok in Path(normalized).name.lower() for tok in ("unins", "uninstall", "remove")):
             return
+
+        if not low.endswith((".exe", ".appref-ms", ".url")):
+            return
+
         key = low
         if key in located:
             return
         located.add(key)
-        found.append((label, path_text))
+        found.append((label, normalized))
 
     def _scan_directory(root: Path, *, max_depth: int = 4, max_files: int = 4000, include_shortcuts: bool = True):
         if not root or not root.exists() or not root.is_dir():
@@ -2747,13 +2830,16 @@ class SessionDialog(tk.Toplevel):
             if not p:
                 self._show_system_dictation_help()
                 return
+
+            resolved = _normalize_dictation_launch_path(p) if os.name == "nt" else p
+            launch_path = resolved or p
+
             if os.name == "nt":
-                # On Windows, ShellExecute is more reliable than direct Popen for
-                # app aliases, shortcuts, and some vendor launchers.
-                os.startfile(p)
+                # Resolve shortcuts/commands to a concrete launcher first.
+                os.startfile(launch_path)
                 self._external_dictation_proc = None
             else:
-                self._external_dictation_proc = subprocess.Popen([p])
+                self._external_dictation_proc = subprocess.Popen([launch_path])
 
             if mark_active:
                 self._active_dictation_mode = "external_app"
@@ -2762,12 +2848,14 @@ class SessionDialog(tk.Toplevel):
             self._dict_sv.set("Dictation: external app launched")
         except Exception as ex:
             p = str(exe_path or "").strip().strip('"')
+            browse_path = _normalize_dictation_launch_path(p) if os.name == "nt" else p
+            browse_path = browse_path or p
             fallback_opened = False
-            if os.name == "nt" and p:
+            if os.name == "nt" and browse_path:
                 try:
-                    target = Path(p)
+                    target = Path(browse_path)
                     if target.exists() and target.is_file():
-                        subprocess.Popen(["explorer", "/select,", str(target)])
+                        subprocess.Popen(["explorer", f"/select,{target}"])
                         fallback_opened = True
                     elif target.exists() and target.is_dir():
                         os.startfile(str(target))
