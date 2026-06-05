@@ -6242,6 +6242,10 @@ class BookkeepingEntryDialog(tk.Toplevel):
     """Add / Edit a single bookkeeping entry."""
 
     _GEOMETRY_PREF_KEY = "bookkeeping_entry_geometry"
+    _STD_DEFAULT_DIALOG_SIZE = (1160, 800)
+    _STD_MIN_DIALOG_SIZE = (1080, 740)
+    _DENSE_DEFAULT_DIALOG_SIZE = (1240, 860)
+    _DENSE_MIN_DIALOG_SIZE = (1040, 700)
 
     def __init__(self, parent, entry=None, on_save=None, preset=None):
         super().__init__(parent)
@@ -6267,6 +6271,8 @@ class BookkeepingEntryDialog(tk.Toplevel):
         self._quick_cat_var = tk.StringVar(value="")
         self._quick_amt_var = tk.StringVar(value="")
         self._last_normal_geometry = ""
+        self._min_dialog_w = 1080
+        self._min_dialog_h = 740
 
         self._build()
         self._load()
@@ -6292,27 +6298,44 @@ class BookkeepingEntryDialog(tk.Toplevel):
             self._last_normal_geometry = geom
 
     def _restore_window_placement(self):
-        default_w, default_h = _screen_fit(1100, 760, pad=40)
+        sw = int(SCREEN_FIT_W or SCREEN_W or self.winfo_screenwidth() or 0)
+        sh = int(SCREEN_FIT_H or SCREEN_H or self.winfo_screenheight() or 0)
+        is_dense = bool(globals().get("UI_DENSE_MODE")) or sw <= 1440 or sh <= 860
+        is_short_screen = sh <= 768
+
+        if is_dense:
+            default_size = self._DENSE_DEFAULT_DIALOG_SIZE
+            min_size = self._DENSE_MIN_DIALOG_SIZE
+            default_pad = 12
+            min_pad = 20
+        else:
+            default_size = self._STD_DEFAULT_DIALOG_SIZE
+            min_size = self._STD_MIN_DIALOG_SIZE
+            default_pad = 28
+            min_pad = 40
+
+        default_w, default_h = _screen_fit(*default_size, pad=default_pad)
+        self._min_dialog_w, self._min_dialog_h = _screen_fit(*min_size, pad=min_pad)
+        self.minsize(self._min_dialog_w, self._min_dialog_h)
         self.geometry(f"{default_w}x{default_h}")
 
         raw = db.get_app_preference(self._GEOMETRY_PREF_KEY, "")
-        if not raw:
-            return
-        try:
-            saved = json.loads(raw)
-        except Exception:
-            return
-
-        if not isinstance(saved, dict):
-            return
-
-        geom = str(saved.get("geometry") or "").strip()
-        if geom and "x" in geom:
+        if raw:
             try:
-                self.geometry(geom)
-                self._last_normal_geometry = geom
-            except tk.TclError:
-                pass
+                saved = json.loads(raw)
+            except Exception:
+                saved = None
+
+            if isinstance(saved, dict):
+                geom = str(saved.get("geometry") or "").strip()
+                if geom and "x" in geom:
+                    try:
+                        self.geometry(geom)
+                        self._last_normal_geometry = geom
+                    except tk.TclError:
+                        pass
+
+        self._enforce_size_floor()
 
         # Always reopen in normal mode at the last user-set size/position.
         # This avoids laptop snap-back behavior when Windows reports stale zoom states.
@@ -6320,6 +6343,39 @@ class BookkeepingEntryDialog(tk.Toplevel):
             self.state("normal")
         except tk.TclError:
             pass
+
+        self._enforce_size_floor()
+
+        if is_short_screen:
+            try:
+                self.state("zoomed")
+            except tk.TclError:
+                pass
+
+    def _enforce_size_floor(self):
+        try:
+            self.update_idletasks()
+            cur_w = int(self.winfo_width())
+            cur_h = int(self.winfo_height())
+            cur_x = int(self.winfo_x())
+            cur_y = int(self.winfo_y())
+        except tk.TclError:
+            return
+
+        target_w = max(cur_w, int(self._min_dialog_w))
+        target_h = max(cur_h, int(self._min_dialog_h))
+        if target_w == cur_w and target_h == cur_h:
+            return
+
+        try:
+            self.geometry(f"{target_w}x{target_h}+{cur_x}+{cur_y}")
+            self._last_normal_geometry = self.geometry()
+        except tk.TclError:
+            try:
+                self.geometry(f"{target_w}x{target_h}")
+                self._last_normal_geometry = self.geometry()
+            except tk.TclError:
+                pass
 
     def _save_window_placement(self):
         try:
