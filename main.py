@@ -6346,7 +6346,7 @@ class BookkeepingEntryDialog(tk.Toplevel):
 
         self._enforce_size_floor()
 
-        if is_short_screen:
+        if is_short_screen or (self._is_edit and is_dense):
             try:
                 self.state("zoomed")
             except tk.TclError:
@@ -6604,6 +6604,10 @@ class BookkeepingEntryDialog(tk.Toplevel):
                 values = set(self._quick_cat_cb.cget("values"))
                 if preset_cat in values:
                     self._quick_cat_var.set(preset_cat)
+        else:
+            # For edit workflows, show all amount buckets by default so users
+            # can review/update every field without extra toggles.
+            self._quick_mode_var.set(False)
 
         self._set_detail_visibility()
 
