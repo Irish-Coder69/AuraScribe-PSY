@@ -6024,77 +6024,77 @@ class ReportsTab(ttk.Frame):
         messagebox.showinfo("Exported", f"Billing exported to:\n{path}")
 
 
-    # ─── CPT Codes Tab ────────────────────────────────────────────────────────────
+# ─── CPT Codes Tab ────────────────────────────────────────────────────────────
 
-    class CPTCodesTab(ttk.Frame):
-        def __init__(self, parent):
-            super().__init__(parent)
-            self._fee_vars: dict[str, tk.StringVar] = {}
-            self._build()
-            self.refresh()
+class CPTCodesTab(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self._fee_vars: dict[str, tk.StringVar] = {}
+        self._build()
+        self.refresh()
 
-        def _build(self):
-            root = ttk.Frame(self, padding=14)
-            root.pack(fill="both", expand=True)
+    def _build(self):
+        root = ttk.Frame(self, padding=14)
+        root.pack(fill="both", expand=True)
 
-            ttk.Label(root, text="CPT Codes", font=FONT_H1).pack(anchor="w")
-            ttk.Label(
-                root,
-                text="Update fee amounts used to auto-fill Session fee when a CPT code is selected.",
-                foreground=MUTED,
-            ).pack(anchor="w", pady=(2, 10))
+        ttk.Label(root, text="CPT Codes", font=FONT_H1).pack(anchor="w")
+        ttk.Label(
+            root,
+            text="Update fee amounts used to auto-fill Session fee when a CPT code is selected.",
+            foreground=MUTED,
+        ).pack(anchor="w", pady=(2, 10))
 
-            grid = ttk.Frame(root)
-            grid.pack(anchor="w", fill="x")
+        grid = ttk.Frame(root)
+        grid.pack(anchor="w", fill="x")
 
-            ttk.Label(grid, text="CPT Code", font=FONT_LG).grid(row=0, column=0, sticky="w", padx=(0, 14), pady=(0, 6))
-            ttk.Label(grid, text="Amount ($)", font=FONT_LG).grid(row=0, column=1, sticky="w", pady=(0, 6))
+        ttk.Label(grid, text="CPT Code", font=FONT_LG).grid(row=0, column=0, sticky="w", padx=(0, 14), pady=(0, 6))
+        ttk.Label(grid, text="Amount ($)", font=FONT_LG).grid(row=0, column=1, sticky="w", pady=(0, 6))
 
-            for i, code in enumerate(CPT_CODES, start=1):
-                ttk.Label(grid, text=code).grid(row=i, column=0, sticky="w", padx=(0, 14), pady=3)
-                v = tk.StringVar(value="0.00")
-                self._fee_vars[code] = v
-                ttk.Entry(grid, textvariable=v, width=12).grid(row=i, column=1, sticky="w", pady=3)
+        for i, code in enumerate(CPT_CODES, start=1):
+            ttk.Label(grid, text=code).grid(row=i, column=0, sticky="w", padx=(0, 14), pady=3)
+            v = tk.StringVar(value="0.00")
+            self._fee_vars[code] = v
+            ttk.Entry(grid, textvariable=v, width=12).grid(row=i, column=1, sticky="w", pady=3)
 
-            btn_row = ttk.Frame(root)
-            btn_row.pack(anchor="w", pady=(12, 0))
-            btn(btn_row, "Save CPT Amounts", self._save, "Accent.TButton").pack(side="left", padx=(0, 8))
-            btn(btn_row, "Reset Defaults", self._reset_defaults).pack(side="left")
+        btn_row = ttk.Frame(root)
+        btn_row.pack(anchor="w", pady=(12, 0))
+        btn(btn_row, "Save CPT Amounts", self._save, "Accent.TButton").pack(side="left", padx=(0, 8))
+        btn(btn_row, "Reset Defaults", self._reset_defaults).pack(side="left")
 
-        def refresh(self):
-            schedule = get_cpt_fee_schedule()
-            for code in CPT_CODES:
-                amount = float(schedule.get(code, 0.0) or 0.0)
-                self._fee_vars[code].set(f"{amount:.2f}")
+    def refresh(self):
+        schedule = get_cpt_fee_schedule()
+        for code in CPT_CODES:
+            amount = float(schedule.get(code, 0.0) or 0.0)
+            self._fee_vars[code].set(f"{amount:.2f}")
 
-        def _save(self):
-            payload: dict[str, float] = {}
-            for code in CPT_CODES:
-                txt = self._fee_vars[code].get().strip()
-                try:
-                    amt = float(txt or 0.0)
-                except ValueError:
-                    messagebox.showerror("Invalid Amount", f"Enter a valid dollar amount for CPT {code}.")
-                    return
-                if amt < 0:
-                    messagebox.showerror("Invalid Amount", f"Amount for CPT {code} cannot be negative.")
-                    return
-                payload[code] = round(amt, 2)
-
-            save_cpt_fee_schedule(payload)
-            self.refresh()
-            messagebox.showinfo("Saved", "CPT amounts saved. Session fee auto-fill now uses these values.")
-
-        def _reset_defaults(self):
-            if not messagebox.askyesno(
-                "Reset CPT Amounts",
-                "Reset all CPT fee amounts to defaults?",
-                parent=self,
-            ):
+    def _save(self):
+        payload: dict[str, float] = {}
+        for code in CPT_CODES:
+            txt = self._fee_vars[code].get().strip()
+            try:
+                amt = float(txt or 0.0)
+            except ValueError:
+                messagebox.showerror("Invalid Amount", f"Enter a valid dollar amount for CPT {code}.")
                 return
-            save_cpt_fee_schedule(DEFAULT_CPT_FEES)
-            self.refresh()
-            messagebox.showinfo("Reset", "CPT amounts reset to default values.")
+            if amt < 0:
+                messagebox.showerror("Invalid Amount", f"Amount for CPT {code} cannot be negative.")
+                return
+            payload[code] = round(amt, 2)
+
+        save_cpt_fee_schedule(payload)
+        self.refresh()
+        messagebox.showinfo("Saved", "CPT amounts saved. Session fee auto-fill now uses these values.")
+
+    def _reset_defaults(self):
+        if not messagebox.askyesno(
+            "Reset CPT Amounts",
+            "Reset all CPT fee amounts to defaults?",
+            parent=self,
+        ):
+            return
+        save_cpt_fee_schedule(DEFAULT_CPT_FEES)
+        self.refresh()
+        messagebox.showinfo("Reset", "CPT amounts reset to default values.")
 
 
 # ─── Provider / Practice Tab ───────────────────────────────────────────────────
