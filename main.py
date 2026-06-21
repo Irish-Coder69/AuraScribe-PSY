@@ -94,6 +94,21 @@ PLACE_CODES    = [("11 - Office", "11"), ("02 - Telehealth", "02"), ("12 - Home"
                   ("23 - Emergency Room", "23")]
 CPT_CODES      = ["90791", "90792", "90832", "90834", "90837", "90845",
                   "90846", "90847", "90853", "90863", "99213", "99214"]
+CPT_FEE_SCHEDULE_PREF_KEY = "billing.cpt_fee_schedule"
+DEFAULT_CPT_FEES = {
+    "90791": 175.00,
+    "90792": 200.00,
+    "90832": 100.00,
+    "90834": 130.00,
+    "90837": 160.00,
+    "90845": 120.00,
+    "90846": 130.00,
+    "90847": 140.00,
+    "90853": 60.00,
+    "90863": 70.00,
+    "99213": 110.00,
+    "99214": 140.00,
+}
 
 STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
           "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
@@ -227,6 +242,62 @@ def _format_battery_flag(value: object) -> str:
 def _format_probe_source(value: object) -> str:
     key = str(value or "none")
     return _PROBE_SOURCE_LABELS.get(key, key)
+
+
+def get_cpt_fee_schedule() -> dict[str, float]:
+    """Return CPT -> fee map from app preferences merged with defaults."""
+    schedule = {code: float(DEFAULT_CPT_FEES.get(code, 0.0)) for code in CPT_CODES}
+    raw = db.get_app_preference(CPT_FEE_SCHEDULE_PREF_KEY, "")
+    if not raw:
+        return schedule
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return schedule
+
+    if not isinstance(payload, dict):
+        return schedule
+
+    for code in CPT_CODES:
+        if code not in payload:
+            continue
+        try:
+            amount = float(payload.get(code, schedule[code]) or 0.0)
+        except Exception:
+            continue
+        if amount < 0:
+            amount = 0.0
+        schedule[code] = round(amount, 2)
+    return schedule
+
+
+def save_cpt_fee_schedule(schedule: dict[str, float | int | str]) -> None:
+    """Persist CPT fee schedule in app preferences as JSON."""
+    cleaned: dict[str, float] = {}
+    for code in CPT_CODES:
+        try:
+            amount = float(schedule.get(code, 0.0) or 0.0)
+        except Exception:
+            amount = 0.0
+        if amount < 0:
+            amount = 0.0
+        cleaned[code] = round(amount, 2)
+
+    db.set_app_preference(
+        CPT_FEE_SCHEDULE_PREF_KEY,
+        json.dumps(cleaned, separators=(",", ":")),
+    )
+
+
+def get_cpt_fee_amount(cpt_code: str) -> float | None:
+    code = str(cpt_code or "").strip()
+    if not code:
+        return None
+    schedule = get_cpt_fee_schedule()
+    if code not in schedule:
+        return None
+    return float(schedule[code])
 
 
 def _probe_machine_type() -> dict[str, object]:
@@ -2480,6 +2551,7 @@ class SessionDialog(tk.Toplevel):
         self._external_dictation_proc = None
         self._dictation_stop = threading.Event()
         self._dictation_thread = None
+        self._suspend_cpt_fee_autofill = False
         self._cached_dictation_apps = []
         self._dict_pref_mode = "offline_vosk"
         self._dict_pref_path = ""
@@ -2539,7 +2611,13 @@ class SessionDialog(tk.Toplevel):
             ttk.Label(top, text="(YYYY-MM-DD)").grid(row=0, column=5, sticky="w")
 
         ttk.Label(top, text="Duration (min)").grid(row=1, column=0, sticky="e", padx=4, pady=3)
-        ttk.Entry(top, textvariable=self._fld("duration", "50"), width=6).grid(row=1, column=1, sticky="ew")
+        ttk.Combobox(
+            top,
+            textvariable=self._fld("duration", "50"),
+            values=["15", "20", "30", "45", "50", "53", "60", "75", "90", "120"],
+            width=8,
+            state="readonly",
+        ).grid(row=1, column=1, sticky="ew")
 
         ttk.Label(top, text="Session Type").grid(row=1, column=2, sticky="e", padx=4)
         ttk.Combobox(top, textvariable=self._fld("session_type", "Individual"),
@@ -2551,13 +2629,22 @@ class SessionDialog(tk.Toplevel):
         pos_cb.grid(row=1, column=5, sticky="ew")
 
         ttk.Label(top, text="CPT Code").grid(row=2, column=0, sticky="e", padx=4, pady=3)
-        ttk.Combobox(top, textvariable=self._fld("cpt_code", "90834"),
-                     values=CPT_CODES, width=10).grid(row=2, column=1, sticky="ew")
+        self._cpt_combo = ttk.Combobox(
+            top,
+            textvariable=self._fld("cpt_code", "90834"),
+            values=CPT_CODES,
+            width=10,
+        )
+        self._cpt_combo.grid(row=2, column=1, sticky="ew")
         ttk.Label(top, text="Modifier").grid(row=2, column=2, sticky="e", padx=4)
         ttk.Entry(top, textvariable=self._fld("cpt_modifier"), width=6).grid(row=2, column=3, sticky="ew")
         ttk.Label(top, text="Fee ($)").grid(row=2, column=4, sticky="e", padx=4)
         ttk.Entry(top, textvariable=self._fld("fee", "0.00"), width=10).grid(row=2, column=5, sticky="ew")
         btn(top, "Dictation Settings", self._open_dictation_settings).grid(row=2, column=6, columnspan=2, sticky="e", padx=4)
+
+        self._vars["cpt_code"].trace_add("write", lambda *_: self._autofill_fee_from_cpt())
+        self._cpt_combo.bind("<<ComboboxSelected>>", lambda _e: self._autofill_fee_from_cpt())
+        self.after_idle(self._autofill_fee_from_cpt)
 
         # Diagnoses row
         dx_frame = lframe(self, "Diagnoses")
@@ -3333,6 +3420,15 @@ class SessionDialog(tk.Toplevel):
                 self._vars[key].set(code)
                 return
         self._vars[PATIENT_DX_KEYS[-1]].set(code)
+
+    def _autofill_fee_from_cpt(self):
+        if self._suspend_cpt_fee_autofill:
+            return
+        cpt_code = str(self._vars.get("cpt_code", tk.StringVar(value="")).get() or "").strip()
+        amount = get_cpt_fee_amount(cpt_code)
+        if amount is None:
+            return
+        self._vars["fee"].set(f"{amount:.2f}")
 
     def _load(self):
         s = db.get_session(self.sid)
@@ -5928,6 +6024,79 @@ class ReportsTab(ttk.Frame):
         messagebox.showinfo("Exported", f"Billing exported to:\n{path}")
 
 
+    # ─── CPT Codes Tab ────────────────────────────────────────────────────────────
+
+    class CPTCodesTab(ttk.Frame):
+        def __init__(self, parent):
+            super().__init__(parent)
+            self._fee_vars: dict[str, tk.StringVar] = {}
+            self._build()
+            self.refresh()
+
+        def _build(self):
+            root = ttk.Frame(self, padding=14)
+            root.pack(fill="both", expand=True)
+
+            ttk.Label(root, text="CPT Codes", font=FONT_H1).pack(anchor="w")
+            ttk.Label(
+                root,
+                text="Update fee amounts used to auto-fill Session fee when a CPT code is selected.",
+                foreground=MUTED,
+            ).pack(anchor="w", pady=(2, 10))
+
+            grid = ttk.Frame(root)
+            grid.pack(anchor="w", fill="x")
+
+            ttk.Label(grid, text="CPT Code", font=FONT_LG).grid(row=0, column=0, sticky="w", padx=(0, 14), pady=(0, 6))
+            ttk.Label(grid, text="Amount ($)", font=FONT_LG).grid(row=0, column=1, sticky="w", pady=(0, 6))
+
+            for i, code in enumerate(CPT_CODES, start=1):
+                ttk.Label(grid, text=code).grid(row=i, column=0, sticky="w", padx=(0, 14), pady=3)
+                v = tk.StringVar(value="0.00")
+                self._fee_vars[code] = v
+                ttk.Entry(grid, textvariable=v, width=12).grid(row=i, column=1, sticky="w", pady=3)
+
+            btn_row = ttk.Frame(root)
+            btn_row.pack(anchor="w", pady=(12, 0))
+            btn(btn_row, "Save CPT Amounts", self._save, "Accent.TButton").pack(side="left", padx=(0, 8))
+            btn(btn_row, "Reset Defaults", self._reset_defaults).pack(side="left")
+
+        def refresh(self):
+            schedule = get_cpt_fee_schedule()
+            for code in CPT_CODES:
+                amount = float(schedule.get(code, 0.0) or 0.0)
+                self._fee_vars[code].set(f"{amount:.2f}")
+
+        def _save(self):
+            payload: dict[str, float] = {}
+            for code in CPT_CODES:
+                txt = self._fee_vars[code].get().strip()
+                try:
+                    amt = float(txt or 0.0)
+                except ValueError:
+                    messagebox.showerror("Invalid Amount", f"Enter a valid dollar amount for CPT {code}.")
+                    return
+                if amt < 0:
+                    messagebox.showerror("Invalid Amount", f"Amount for CPT {code} cannot be negative.")
+                    return
+                payload[code] = round(amt, 2)
+
+            save_cpt_fee_schedule(payload)
+            self.refresh()
+            messagebox.showinfo("Saved", "CPT amounts saved. Session fee auto-fill now uses these values.")
+
+        def _reset_defaults(self):
+            if not messagebox.askyesno(
+                "Reset CPT Amounts",
+                "Reset all CPT fee amounts to defaults?",
+                parent=self,
+            ):
+                return
+            save_cpt_fee_schedule(DEFAULT_CPT_FEES)
+            self.refresh()
+            messagebox.showinfo("Reset", "CPT amounts reset to default values.")
+
+
 # ─── Provider / Practice Tab ───────────────────────────────────────────────────
 
 class ProviderPracticeTab(ttk.Frame):
@@ -6785,7 +6954,7 @@ class AppointmentDialog(tk.Toplevel):
         ttk.Label(f, text="Duration (min):").grid(row=2, column=2, sticky="e", padx=(10, 6), pady=4)
         self._dur_sv = tk.StringVar(value="50")
         ttk.Combobox(f, textvariable=self._dur_sv,
-                     values=["15", "30", "45", "50", "60", "75", "90", "120"],
+                     values=["15", "20", "30", "45", "50", "53", "60", "75", "90", "120"],
                      width=6, state="readonly").grid(row=2, column=3, sticky="w", pady=4)
 
         ttk.Label(f, text="Type:").grid(row=3, column=0, sticky="e", padx=(0, 6), pady=4)
@@ -7841,6 +8010,7 @@ class TheraTrakApp(tk.Tk):
         self.tab_sessions = SessionNotesTab(self.nb)
         self.tab_appointments = AppointmentBookTab(self.nb)
         self.tab_billing = BillingTab(self.nb)
+        self.tab_cpt_codes = CPTCodesTab(self.nb)
         self.tab_cms = CMS1500Tab(self.nb)
         self.tab_bookkeeping = BookkeepingTab(self.nb)
         self.tab_reports = ReportsTab(self.nb)
@@ -7851,6 +8021,7 @@ class TheraTrakApp(tk.Tk):
         self.nb.add(self.tab_sessions, text="  Session Notes  ")
         self.nb.add(self.tab_appointments, text="  Appointment Book  ")
         self.nb.add(self.tab_billing, text="  Billing  ")
+        self.nb.add(self.tab_cpt_codes, text="  CPT Codes  ")
         self.nb.add(self.tab_cms, text="  CMS-1500  ")
         self.nb.add(self.tab_bookkeeping, text="  Bookkeeping  ")
         self.nb.add(self.tab_reports, text="  Reports  ")
@@ -7904,6 +8075,7 @@ class TheraTrakApp(tk.Tk):
         nav_menu.add_command(label="Session Notes", command=lambda: self.nb.select(self.tab_sessions))
         nav_menu.add_command(label="Appointments", command=lambda: self.nb.select(self.tab_appointments))
         nav_menu.add_command(label="Billing", command=lambda: self.nb.select(self.tab_billing))
+        nav_menu.add_command(label="CPT Codes", command=lambda: self.nb.select(self.tab_cpt_codes))
         nav_menu.add_command(label="CMS-1500", command=lambda: self.nb.select(self.tab_cms))
         nav_menu.add_command(label="Bookkeeping", command=lambda: self.nb.select(self.tab_bookkeeping))
         nav_menu.add_command(label="Reports", command=lambda: self.nb.select(self.tab_reports))
