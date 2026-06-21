@@ -1109,6 +1109,7 @@ def _find_dictation_apps_systemwide() -> list[tuple[str, str]]:
                 text=True,
                 timeout=12,
                 check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except Exception:
             return
