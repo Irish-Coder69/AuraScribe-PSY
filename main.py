@@ -5846,6 +5846,7 @@ class ReportsTab(ttk.Frame):
         super().__init__(parent)
         self._last_cms_rows = []
         self._last_cms_title = "CMS-1500 Forms Created"
+        self._cms_patient_map: dict[str, int] = {}
         self._build()
 
     def _build(self):
@@ -5868,18 +5869,53 @@ class ReportsTab(ttk.Frame):
             # Keep report controls compact so the output area has more room.
             btn(actions, txt, cmd, "TButton", width=38).pack(fill="x", padx=4, pady=2)
 
+        cms_filters = lframe(actions, "CMS-1500 Filters")
+        cms_filters.pack(fill="x", padx=4, pady=(2, 6))
+
+        ttk.Label(cms_filters, text="Patient").pack(anchor="w", padx=2)
+        self._cms_patient_sv = tk.StringVar(value="All Patients")
+        self._cms_patient_cb = ttk.Combobox(
+            cms_filters,
+            textvariable=self._cms_patient_sv,
+            state="readonly",
+            width=34,
+        )
+        self._cms_patient_cb.pack(fill="x", pady=(0, 4))
+
+        ttk.Label(cms_filters, text="Month Created").pack(anchor="w", padx=2)
+        self._cms_month_sv = tk.StringVar(value="All Months")
+        self._cms_month_cb = ttk.Combobox(
+            cms_filters,
+            textvariable=self._cms_month_sv,
+            state="readonly",
+            width=34,
+            values=[
+                "All Months",
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December",
+            ],
+        )
+        self._cms_month_cb.pack(fill="x", pady=(0, 4))
+
+        ttk.Label(cms_filters, text="Year Created (Choose Year)").pack(anchor="w", padx=2)
+        self._cms_year_sv = tk.StringVar(value="All Years")
+        self._cms_year_cb = ttk.Combobox(
+            cms_filters,
+            textvariable=self._cms_year_sv,
+            state="readonly",
+            width=34,
+        )
+        self._cms_year_cb.pack(fill="x", pady=(0, 6))
+
+        btn(cms_filters, "Run CMS-1500 Forms Created", self._run_cms1500_filtered_report, "TButton", width=34).pack(fill="x")
+        self._load_cms_filter_options()
+
         report_btn("Patient Roster (Active)",    self._rpt_active_patients)
         report_btn("Patient Roster (Inactive)",  self._rpt_inactive_patients)
         report_btn("Sessions This Month",        self._rpt_sessions_month)
         report_btn("Sessions by Patient",        self._rpt_sessions_patient)
         report_btn("Billing Summary",            self._rpt_billing_summary)
         report_btn("Outstanding Balances",       self._rpt_outstanding)
-        report_btn("CMS-1500 Forms Created (All)", self._rpt_cms1500_created)
-        report_btn("CMS-1500 Forms Created (This Month)", self._rpt_cms1500_created_month)
-        report_btn("CMS-1500 Forms Created (Last 30 Days)", self._rpt_cms1500_created_last_30)
-        report_btn("CMS-1500 Forms Created (This Year)", self._rpt_cms1500_created_this_year)
-        report_btn("CMS-1500 Forms Created (Past Year)", self._rpt_cms1500_created_past_year)
-        report_btn("CMS-1500 Forms Created (Choose Year)", self._rpt_cms1500_created_pick_year)
         report_btn("Export CMS-1500 Forms (CSV)", self._export_cms1500_csv)
         report_btn("Export All Patients (CSV)",  self._export_patients_csv)
         report_btn("Export Sessions (CSV)",      self._export_sessions_csv)
@@ -6003,6 +6039,87 @@ class ReportsTab(ttk.Frame):
         for r in rows:
             phone = r["phone_home"] or r["phone_cell"] or ""
             lines.append(f"{r['last_name']+', '+r['first_name']:<26}  {phone:<14}  {fmt_money(r['bal']):>10}")
+        self._show("\n".join(lines))
+
+    def _load_cms_filter_options(self):
+        logs = db.get_cms1500_form_creation_logs()
+
+        patient_items = {"All Patients": 0}
+        for r in logs:
+            label = f"{r['last_name']}, {r['first_name']} (ID:{int(r['patient_id'])})"
+            patient_items[label] = int(r["patient_id"])
+        self._cms_patient_map = patient_items
+        patient_values = list(patient_items.keys())
+        self._cms_patient_cb["values"] = patient_values
+        if self._cms_patient_sv.get() not in patient_values:
+            self._cms_patient_sv.set("All Patients")
+
+        years = []
+        for r in logs:
+            created_at = str(r["created_at"] or "")
+            yr = created_at[:4]
+            if yr.isdigit():
+                years.append(yr)
+        year_values = ["All Years"] + sorted(set(years), reverse=True)
+        self._cms_year_cb["values"] = year_values
+        if self._cms_year_sv.get() not in year_values:
+            self._cms_year_sv.set("All Years")
+
+        if not self._cms_month_sv.get():
+            self._cms_month_sv.set("All Months")
+
+    def _run_cms1500_filtered_report(self):
+        self._load_cms_filter_options()
+        rows = db.get_cms1500_form_creation_logs()
+
+        selected_patient = self._cms_patient_sv.get().strip()
+        selected_month = self._cms_month_sv.get().strip()
+        selected_year = self._cms_year_sv.get().strip()
+
+        month_map = {
+            "January": "01", "February": "02", "March": "03", "April": "04",
+            "May": "05", "June": "06", "July": "07", "August": "08",
+            "September": "09", "October": "10", "November": "11", "December": "12",
+        }
+
+        if selected_patient and selected_patient != "All Patients":
+            pid = self._cms_patient_map.get(selected_patient)
+            if pid:
+                rows = [r for r in rows if int(r["patient_id"]) == int(pid)]
+
+        if selected_year and selected_year != "All Years":
+            rows = [r for r in rows if str(r["created_at"] or "").startswith(f"{selected_year}-")]
+
+        if selected_month and selected_month != "All Months":
+            month_num = month_map.get(selected_month)
+            if month_num:
+                rows = [r for r in rows if str(r["created_at"] or "")[5:7] == month_num]
+
+        title_parts = ["CMS-1500 Forms Created"]
+        if selected_patient != "All Patients":
+            title_parts.append(selected_patient)
+        if selected_month != "All Months":
+            title_parts.append(selected_month)
+        if selected_year != "All Years":
+            title_parts.append(selected_year)
+        title = " | ".join(title_parts)
+
+        self._last_cms_rows = rows
+        self._last_cms_title = title
+        lines = [
+            title,
+            "=" * 96,
+            f"{'Created On':<10}  {'Patient':<28}  {'Source':<20}  {'Patient ID':>10}",
+            "-" * 96,
+        ]
+        for r in rows:
+            created_at = str(r["created_at"] or "")
+            created_disp = created_at[:10]
+            patient_name = f"{r['last_name']}, {r['first_name']}"
+            lines.append(
+                f"{created_disp:<10}  {patient_name:<28}  {str(r['created_source'] or ''):<20}  {int(r['patient_id']):>10}"
+            )
+        lines.append(f"\nTotal CMS-1500 forms created: {len(rows)}")
         self._show("\n".join(lines))
 
     def _rpt_cms1500_created(self, created_from: str = "", created_to: str = "", title: str = "CMS-1500 Forms Created"):
