@@ -6045,9 +6045,11 @@ class ReportsTab(ttk.Frame):
         logs = db.get_cms1500_form_creation_logs()
 
         patient_items = {"All Patients": 0}
-        for r in logs:
-            label = f"{r['last_name']}, {r['first_name']} (ID:{int(r['patient_id'])})"
-            patient_items[label] = int(r["patient_id"])
+        roster_rows = db.get_all_patients("Active") + db.get_all_patients("Inactive")
+        for p in roster_rows:
+            status = str(p["status"] or "").strip() or "Unknown"
+            label = f"{p['last_name']}, {p['first_name']} [{status}] (ID:{int(p['id'])})"
+            patient_items[label] = int(p["id"])
         self._cms_patient_map = patient_items
         patient_values = list(patient_items.keys())
         self._cms_patient_cb["values"] = patient_values
