@@ -5853,9 +5853,20 @@ class ReportsTab(ttk.Frame):
 
         frm = ttk.Frame(self, padding=12)
         frm.pack(fill="both", expand=True)
+        frm.columnconfigure(1, weight=1)
+        frm.rowconfigure(0, weight=1)
+
+        actions = lframe(frm, "Reports")
+        actions.grid(row=0, column=0, sticky="nsw", padx=(0, 10))
+
+        output_wrap = lframe(frm, "Report Output")
+        output_wrap.grid(row=0, column=1, sticky="nsew")
+        output_wrap.columnconfigure(0, weight=1)
+        output_wrap.rowconfigure(0, weight=1)
 
         def report_btn(txt, cmd):
-            btn(frm, txt, cmd, "Accent.TButton").pack(fill="x", padx=4, pady=4)
+            # Keep report controls compact so the output area has more room.
+            btn(actions, txt, cmd, "TButton", width=38).pack(fill="x", padx=4, pady=2)
 
         report_btn("Patient Roster (Active)",    self._rpt_active_patients)
         report_btn("Patient Roster (Inactive)",  self._rpt_inactive_patients)
@@ -5874,14 +5885,14 @@ class ReportsTab(ttk.Frame):
         report_btn("Export Sessions (CSV)",      self._export_sessions_csv)
         report_btn("Export Billing (CSV)",       self._export_billing_csv)
 
-        self._output = tk.Text(frm, font=FONT_MONO, wrap="none", height=22,
+        self._output = tk.Text(output_wrap, font=FONT_MONO, wrap="none", height=24,
                                relief="solid", borderwidth=1, background="#fafafa")
-        sb_v = ttk.Scrollbar(frm, orient="vertical",   command=self._output.yview)
-        sb_h = ttk.Scrollbar(frm, orient="horizontal", command=self._output.xview)
+        sb_v = ttk.Scrollbar(output_wrap, orient="vertical",   command=self._output.yview)
+        sb_h = ttk.Scrollbar(output_wrap, orient="horizontal", command=self._output.xview)
         self._output.configure(yscrollcommand=sb_v.set, xscrollcommand=sb_h.set)
-        self._output.pack(side="top", fill="both", expand=True, pady=(10, 0))
-        sb_v.pack(side="right", fill="y")
-        sb_h.pack(side="bottom", fill="x")
+        self._output.grid(row=0, column=0, sticky="nsew")
+        sb_v.grid(row=0, column=1, sticky="ns")
+        sb_h.grid(row=1, column=0, sticky="ew")
 
     def _show(self, text):
         self._output.config(state="normal")
