@@ -28,7 +28,7 @@ import uuid
 import webbrowser
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 try:
     from tkcalendar import DateEntry as _DateEntry
@@ -5092,6 +5092,20 @@ class CMS1500Tab(ttk.Frame):
             messagebox.showerror("CMS-1500", f"Could not generate PDF:\n{ex}")
             return None
 
+    def _log_form_creation(self, source: str, output_path: Path | None = None):
+        """Best-effort audit log for CMS-1500 creation events."""
+        if not self._current_pid:
+            return
+        try:
+            db.log_cms1500_form_creation(
+                int(self._current_pid),
+                created_source=source,
+                output_path=str(output_path) if output_path else "",
+            )
+        except Exception:
+            # Reporting logs should not block export/print workflows.
+            pass
+
     def _auto_populate(self):
         picker = tk.Toplevel(self)
         apply_window_icon(picker)
@@ -5636,6 +5650,7 @@ class CMS1500Tab(ttk.Frame):
             return
         saved = self._fill_to_path(Path(path), render_mode=export_mode)
         if saved:
+            self._log_form_creation("export", saved)
             mode_text = "blank paper (full form)" if uses_blank_paper else "pre-printed form (front side only)"
             messagebox.showinfo("Exported", f"PDF saved for {mode_text}:\n{saved}")
 
@@ -5757,6 +5772,7 @@ class CMS1500Tab(ttk.Frame):
                     saved_front = self._fill_to_path(front_path, render_mode="front_only")
                     if not saved_front:
                         return
+                    self._log_form_creation("print_blank_front", saved_front)
                     front_to_print = saved_front
                     if abs(blank_offset_x_pts) > 0.01 or abs(blank_offset_y_pts) > 0.01:
                         try:
@@ -5809,12 +5825,14 @@ class CMS1500Tab(ttk.Frame):
                     else:
                         messagebox.showinfo("Print", "CMS-1500 front sent to printer.\n(No back template found.)")
                 else:
+                    self._log_form_creation("print_preprinted", saved)
                     os.startfile(str(saved), "print")
                     messagebox.showinfo("Print", "CMS-1500 sent to default printer.")
             else:
                 saved = self._fill_to_path(print_path, render_mode="full")
                 if not saved:
                     return
+                self._log_form_creation("print_non_windows", saved)
                 webbrowser.open(saved.resolve().as_uri())
                 messagebox.showinfo("Print", f"Opened PDF for printing:\n{saved}")
         except OSError as ex:
@@ -5826,6 +5844,8 @@ class CMS1500Tab(ttk.Frame):
 class ReportsTab(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self._last_cms_rows = []
+        self._last_cms_title = "CMS-1500 Forms Created"
         self._build()
 
     def _build(self):
@@ -5843,6 +5863,13 @@ class ReportsTab(ttk.Frame):
         report_btn("Sessions by Patient",        self._rpt_sessions_patient)
         report_btn("Billing Summary",            self._rpt_billing_summary)
         report_btn("Outstanding Balances",       self._rpt_outstanding)
+        report_btn("CMS-1500 Forms Created (All)", self._rpt_cms1500_created)
+        report_btn("CMS-1500 Forms Created (This Month)", self._rpt_cms1500_created_month)
+        report_btn("CMS-1500 Forms Created (Last 30 Days)", self._rpt_cms1500_created_last_30)
+        report_btn("CMS-1500 Forms Created (This Year)", self._rpt_cms1500_created_this_year)
+        report_btn("CMS-1500 Forms Created (Past Year)", self._rpt_cms1500_created_past_year)
+        report_btn("CMS-1500 Forms Created (Choose Year)", self._rpt_cms1500_created_pick_year)
+        report_btn("Export CMS-1500 Forms (CSV)", self._export_cms1500_csv)
         report_btn("Export All Patients (CSV)",  self._export_patients_csv)
         report_btn("Export Sessions (CSV)",      self._export_sessions_csv)
         report_btn("Export Billing (CSV)",       self._export_billing_csv)
@@ -5966,6 +5993,88 @@ class ReportsTab(ttk.Frame):
             phone = r["phone_home"] or r["phone_cell"] or ""
             lines.append(f"{r['last_name']+', '+r['first_name']:<26}  {phone:<14}  {fmt_money(r['bal']):>10}")
         self._show("\n".join(lines))
+
+    def _rpt_cms1500_created(self, created_from: str = "", created_to: str = "", title: str = "CMS-1500 Forms Created"):
+        rows = db.get_cms1500_form_creation_logs(created_from=created_from, created_to=created_to)
+        self._last_cms_rows = rows
+        self._last_cms_title = title
+        lines = [
+            title,
+            "=" * 96,
+            f"{'Created On':<10}  {'Patient':<28}  {'Source':<20}  {'Patient ID':>10}",
+            "-" * 96,
+        ]
+        for r in rows:
+            created_at = str(r["created_at"] or "")
+            created_disp = created_at[:10]
+            patient_name = f"{r['last_name']}, {r['first_name']}"
+            lines.append(
+                f"{created_disp:<10}  {patient_name:<28}  {str(r['created_source'] or ''):<20}  {int(r['patient_id']):>10}"
+            )
+        lines.append(f"\nTotal CMS-1500 forms created: {len(rows)}")
+        self._show("\n".join(lines))
+
+    def _rpt_cms1500_created_month(self):
+        start = date.today().replace(day=1).isoformat() + " 00:00:00"
+        self._rpt_cms1500_created(created_from=start, title="CMS-1500 Forms Created (This Month)")
+
+    def _rpt_cms1500_created_last_30(self):
+        start = (date.today() - timedelta(days=30)).isoformat() + " 00:00:00"
+        self._rpt_cms1500_created(created_from=start, title="CMS-1500 Forms Created (Last 30 Days)")
+
+    def _rpt_cms1500_created_this_year(self):
+        self._rpt_cms1500_created_year(date.today().year)
+
+    def _rpt_cms1500_created_past_year(self):
+        self._rpt_cms1500_created_year(date.today().year - 1)
+
+    def _rpt_cms1500_created_year(self, year: int):
+        start = f"{int(year):04d}-01-01 00:00:00"
+        end = f"{int(year) + 1:04d}-01-01 00:00:00"
+        self._rpt_cms1500_created(
+            created_from=start,
+            created_to=end,
+            title=f"CMS-1500 Forms Created ({int(year)})",
+        )
+
+    def _rpt_cms1500_created_pick_year(self):
+        current_year = date.today().year
+        year = simpledialog.askinteger(
+            "Choose Year",
+            "Enter year for CMS-1500 report:",
+            parent=self,
+            minvalue=2000,
+            maxvalue=current_year,
+            initialvalue=current_year,
+        )
+        if year is None:
+            return
+        self._rpt_cms1500_created_year(int(year))
+
+    def _export_cms1500_csv(self):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", filetypes=[("CSV", "*.csv")],
+            initialfile="cms1500_forms_created.csv")
+        if not path:
+            return
+        import csv as _csv
+
+        rows = self._last_cms_rows or db.get_cms1500_form_creation_logs()
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
+            w = _csv.writer(f)
+            w.writerow(["created_on", "patient_id", "last_name", "first_name", "source", "created_at", "output_path"])
+            for r in rows:
+                created_at = str(r["created_at"] or "")
+                w.writerow([
+                    created_at[:10],
+                    r["patient_id"],
+                    r["last_name"],
+                    r["first_name"],
+                    r["created_source"],
+                    created_at,
+                    r["output_path"],
+                ])
+        messagebox.showinfo("Exported", f"{self._last_cms_title} exported to:\n{path}")
 
     def _export_patients_csv(self):
         path = filedialog.asksaveasfilename(

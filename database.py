@@ -230,6 +230,7 @@ def initialize_db():
     _migrate_users_table()
     _migrate_provider_settings_table()
     _migrate_app_preferences_table()
+    _migrate_cms1500_forms_log_table()
     _migrate_bookkeeping_tables()
     _migrate_appointments_table()
     _seed_dsm_codes()
@@ -382,6 +383,24 @@ def _migrate_app_preferences_table():
         CREATE TABLE IF NOT EXISTS app_preferences (
             pref_key   TEXT PRIMARY KEY,
             pref_value TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def _migrate_cms1500_forms_log_table():
+    """Ensure CMS-1500 creation logs table exists for reporting."""
+    conn = get_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cms1500_forms_log (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id     INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+            created_source TEXT DEFAULT '',
+            output_path    TEXT DEFAULT '',
+            created_at     TEXT DEFAULT (datetime('now'))
         )
         """
     )
@@ -704,6 +723,71 @@ def get_billing_summary():
     ).fetchone()
     conn.close()
     return (round(row["tc"] or 0, 2), round(row["tp"] or 0, 2), round(row["tb"] or 0, 2))
+
+
+def log_cms1500_form_creation(patient_id: int, created_source: str = "", output_path: str = "") -> int:
+    """Persist a CMS-1500 form creation event for reporting."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO cms1500_forms_log(patient_id, created_source, output_path)
+        VALUES (?, ?, ?)
+        """,
+        (int(patient_id), (created_source or "").strip(), str(output_path or "")),
+    )
+    log_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return int(log_id)
+
+
+def get_cms1500_form_creation_logs(limit: int = 0, created_from: str = "", created_to: str = ""):
+    """Return CMS-1500 creation rows joined with patient identity."""
+    conn = get_connection()
+    sql = """
+        SELECT l.id,
+               l.patient_id,
+               p.last_name,
+               p.first_name,
+               l.created_source,
+               l.output_path,
+               l.created_at
+        FROM cms1500_forms_log l
+        JOIN patients p ON p.id = l.patient_id
+    """
+    where = []
+    params_list: list[object] = []
+    if created_from:
+        where.append("l.created_at >= ?")
+        params_list.append(str(created_from))
+    if created_to:
+        where.append("l.created_at < ?")
+        params_list.append(str(created_to))
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+
+    sql += " ORDER BY l.created_at DESC, l.id DESC"
+
+    params = tuple(params_list)
+    if limit and int(limit) > 0:
+        sql += " LIMIT ?"
+        params = params + (int(limit),)
+
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    except sqlite3.OperationalError as ex:
+        msg = str(ex).lower()
+        if "no such table" in msg and "cms1500_forms_log" in msg:
+            conn.close()
+            _migrate_cms1500_forms_log_table()
+            conn = get_connection()
+            rows = conn.execute(sql, params).fetchall()
+        else:
+            conn.close()
+            raise
+    conn.close()
+    return rows
 
 
 # ΓöÇΓöÇΓöÇ Provider Settings ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
